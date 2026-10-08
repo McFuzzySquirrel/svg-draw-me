@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { viewportToProject } from "../src/coordinates";
+import { viewportToProject, zoomTransformAtPoint } from "../src/coordinates";
 
 describe("canvas coordinate conversion", () => {
   it("removes the centered letterbox offset before applying scale", () => {
@@ -11,5 +11,17 @@ describe("canvas coordinate conversion", () => {
     );
 
     expect(point).toEqual({ x: 400, y: 280 });
+  });
+
+  it("keeps the document point under the cursor while zooming", () => {
+    const transform = zoomTransformAtPoint(
+      { scale: 1, offsetX: 100, offsetY: 50 },
+      { x: 200, y: 100 },
+      { x: 300, y: 150 },
+      2,
+    );
+
+    expect(transform).toEqual({ scale: 2, offsetX: -100, offsetY: -50 });
+    expect(viewportToProject(300, 150, { left: 0, top: 0 }, transform)).toEqual({ x: 200, y: 100 });
   });
 });

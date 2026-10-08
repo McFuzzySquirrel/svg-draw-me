@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendStroke, createProject, deserializeProject, serializeProject } from "../src/document";
+import { appendShape, appendStroke, createProject, deserializeProject, serializeProject } from "../src/document";
 import { projectToEditableSvg, projectToSvg } from "../src/svg";
 
 describe("stroke-preserving document", () => {
@@ -58,5 +58,36 @@ describe("stroke-preserving document", () => {
     expect(() => deserializeProject(JSON.stringify({ version: 99, strokes: [] }))).toThrow(
       "Unsupported or invalid project version",
     );
+  });
+
+  it("round trips first-class shape elements", () => {
+    const project = appendShape(createProject(), {
+      kind: "rectangle",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: "#eeeeee",
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { x: 10, y: 20, width: 30, height: 40 },
+    });
+    const restored = deserializeProject(serializeProject(project));
+    expect(restored.shapes[0]).toMatchObject({ kind: "rectangle", geometry: { width: 30, height: 40 } });
+  });
+
+  it("exports first-class shapes", () => {
+    const project = appendShape(createProject(), {
+      kind: "ellipse",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: "#eeeeee",
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { cx: 20, cy: 25, rx: 10, ry: 5 },
+    });
+    expect(projectToSvg(project)).toContain('<ellipse cx="20" cy="25" rx="10" ry="5"');
   });
 });

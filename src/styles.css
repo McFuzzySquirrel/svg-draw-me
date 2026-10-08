@@ -16,6 +16,8 @@ button, input { font: inherit; }
 .brand { display: flex; flex-direction: column; margin-right: 0.75rem; }
 .brand span { color: #a8b5ca; font-size: 0.75rem; }
 .controls label { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; }
+.control-group { display: inline-flex; align-items: center; gap: 0.65rem; padding: 0.25rem 0.5rem; border: 1px solid #40516d; border-radius: 0.45rem; }
+.control-group label { white-space: nowrap; }
 .zoom-controls { display: inline-flex; align-items: center; gap: 0.3rem; }
 .zoom-controls output { min-width: 3.5rem; text-align: center; color: #c6d1e4; }
 button, .file-button {

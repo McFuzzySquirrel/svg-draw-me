@@ -46,7 +46,10 @@ controls.innerHTML = `
   <label>Color <input id="color" type="color" value="${currentStyle.color}"></label>
   <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
   <label>Tool <select id="tool"><option value="pen">Pen</option><option value="eraser">Eraser</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
-  <label>Fill <input id="fill-enabled" type="checkbox"><input id="fill-color" type="color" value="${fillColor}"></label>
+  <span class="control-group" aria-label="Shape fill controls">
+    <label for="fill-enabled"><input id="fill-enabled" type="checkbox"> Fill shape</label>
+    <label for="fill-color">Fill color <input id="fill-color" type="color" value="${fillColor}"></label>
+  </span>
   <button id="undo" type="button">Undo</button>
   <button id="clear" type="button">Clear</button>
   <span class="zoom-controls" aria-label="Zoom controls">

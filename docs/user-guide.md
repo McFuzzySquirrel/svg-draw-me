@@ -32,7 +32,7 @@ Each completed stroke records its points, timestamps, pointer type, pressure, an
 
 ### Create shapes
 
-Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Polygon**, or **Curved line**. Drag to define the geometry; polygons collect the drag path and close when released. Shapes use the current outline color and width. Enable **Fill** and choose a fill color when a filled shape is needed.
+Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Polygon**, or **Curved line**. Drag to define the geometry; polygons collect the drag path and close when released. Shapes use the current outline color and width. Turn on **Fill shape**, then choose a **Fill color** before drawing when a filled shape is needed. Line and Curved line remain outline-only.
 
 Shapes remain first-class objects in the editable project model and export as SVG line, rectangle, ellipse, polygon, or quadratic-path elements.
 

@@ -31,6 +31,7 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 ### Fixed
 
+- Made shape fill controls explicit with separate **Fill shape** and **Fill color** labels.
 - Pointer alignment when the responsive canvas is letterboxed.
 - Invisible reference previews caused by unloaded URL textures.
 - SVG import decoding for uploaded SVG files.

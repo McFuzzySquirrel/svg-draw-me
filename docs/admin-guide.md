@@ -19,7 +19,7 @@ npm install
 npm run build
 ```
 
-The production output is generated in `dist/`. A static web server can serve that directory. The repository does not currently define a deployment provider or hosting workflow.
+The production output is generated in `dist/`. A static web server can serve that directory. The repository publishes `main` automatically to GitHub Pages through `.github/workflows/deploy-pages.yml`.
 
 For local development:
 
@@ -29,12 +29,23 @@ npm run dev
 
 ## Configuration
 
-There are no environment variables or deployment secrets. Application defaults are source constants:
+There are no application environment variables or deployment secrets. GitHub Pages deployment uses the workflow's built-in `pages` and `id-token` permissions. Application defaults are source constants:
 
 - Project size: 1200×800 in `src/document.ts`.
 - Zoom bounds: 0.25–8 in `src/main.ts`.
 - Vite configuration: `vite.config.ts`.
 - TypeScript configuration: `tsconfig.json`.
+
+## GitHub Pages deployment
+
+The Pages workflow runs on pushes to `main` and can be started manually from the Actions tab. It performs these steps:
+
+1. Install the lockfile dependencies with `npm ci`.
+2. Run `npm test -- --run`.
+3. Build the static site with `npm run build`.
+4. Upload `dist/` and deploy it with the GitHub Pages deployment action.
+
+The repository Pages URL is `https://mcfuzzysquirrel.github.io/svg-draw-me/`. If the deployment fails, inspect the failed Actions step, correct the source issue, and rerun the workflow. No application data is stored by the deployment.
 
 If these values are changed, update the user guide and README configuration tables.
 

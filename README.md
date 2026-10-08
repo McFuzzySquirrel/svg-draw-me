@@ -104,6 +104,13 @@ npm test
 npm run build
 ```
 
+### GitHub Pages deployment
+
+Pushes to `main` run the workflow in `.github/workflows/deploy-pages.yml`. It installs locked dependencies, runs the test suite, builds `dist/`, and publishes the result through the GitHub Pages deployment environment. It can also be started manually with **Actions → Deploy to GitHub Pages → Run workflow**.
+
+The Vite build uses relative asset paths so the app works at the repository Pages URL:
+`https://mcfuzzysquirrel.github.io/svg-draw-me/`.
+
 ## Configuration
 
 The app has no environment variables, server configuration, authentication settings, or runtime configuration files. The default project size is defined in `src/document.ts`:
@@ -141,7 +148,6 @@ The following are planned or known gaps, not shipped features:
 - More advanced stroke smoothing and pressure-based width rendering.
 - Browser-level interaction tests.
 - More complete handling or fallback behavior for SVG filters, masks, CSS, and external assets.
-- Production hosting and release automation.
 
 ## License
 

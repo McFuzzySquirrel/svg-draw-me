@@ -1,5 +1,5 @@
 import { Application, Assets, Container, Graphics, Sprite } from "pixi.js";
-import { viewportToProject } from "./coordinates";
+import { viewportToProject, zoomTransformAtPoint } from "./coordinates";
 import { appendStroke, cloneProject, createProject } from "./document";
 import { createSvgBlob } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
@@ -26,6 +26,14 @@ let viewportLayer: Container;
 let canvasScale = 1;
 let canvasOffsetX = 0;
 let canvasOffsetY = 0;
+let fitScale = 1;
+let zoom = 1;
+let panX = 0;
+let panY = 0;
+let spacePressed = false;
+let panPointer: { id: number; x: number; y: number } | null = null;
+const pointers = new Map<number, { x: number; y: number; type: string }>();
+let pinchStart: { distance: number; zoom: number; x: number; y: number } | null = null;
 
 const controls = document.createElement("section");
 controls.className = "controls";
@@ -35,6 +43,12 @@ controls.innerHTML = `
   <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
   <button id="undo" type="button">Undo</button>
   <button id="clear" type="button">Clear</button>
+  <span class="zoom-controls" aria-label="Zoom controls">
+    <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <output id="zoom-value">100%</output>
+    <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    <button id="zoom-reset" type="button">Reset zoom</button>
+  </span>
   <label class="file-button">Reference image<input id="raster" type="file" accept="image/png,image/jpeg"></label>
   <label class="file-button">Import SVG<input id="svg" type="file" accept="image/svg+xml,.svg"></label>
   <button id="export-svg" type="button">Download SVG</button>
@@ -102,19 +116,111 @@ const toProjectPoint = (event: PointerEvent): StrokePoint => {
 const pointerKind = (event: PointerEvent): PointerKind =>
   event.pointerType === "pen" ? "pen" : event.pointerType === "touch" ? "touch" : "mouse";
 
+const viewportPoint = (event: PointerEvent): { x: number; y: number } => {
+  const rect = pixi.canvas.getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+};
+
+const syncViewport = (): void => {
+  canvasScale = fitScale * zoom;
+  const centeredX = (pixi.screen.width - project.width * canvasScale) / 2;
+  const centeredY = (pixi.screen.height - project.height * canvasScale) / 2;
+  canvasOffsetX = centeredX + panX;
+  canvasOffsetY = centeredY + panY;
+  viewportLayer.position.set(canvasOffsetX, canvasOffsetY);
+  viewportLayer.scale.set(canvasScale);
+  const value = document.querySelector<HTMLOutputElement>("#zoom-value");
+  if (value) value.value = `${Math.round(zoom * 100)}%`;
+  redraw();
+};
+
+const zoomAt = (nextZoom: number, point: { x: number; y: number }): void => {
+  const boundedZoom = Math.max(0.25, Math.min(8, nextZoom));
+  const projectPoint = viewportToProject(
+    point.x,
+    point.y,
+    { left: 0, top: 0 },
+    { scale: canvasScale, offsetX: canvasOffsetX, offsetY: canvasOffsetY },
+  );
+  const nextScale = fitScale * boundedZoom;
+  const nextTransform = zoomTransformAtPoint(
+    { scale: canvasScale, offsetX: canvasOffsetX, offsetY: canvasOffsetY },
+    projectPoint,
+    point,
+    nextScale,
+  );
+  zoom = boundedZoom;
+  panX = nextTransform.offsetX - (pixi.screen.width - project.width * nextScale) / 2;
+  panY = nextTransform.offsetY - (pixi.screen.height - project.height * nextScale) / 2;
+  syncViewport();
+};
+
+const distanceBetween = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
+  Math.hypot(a.x - b.x, a.y - b.y);
+
+window.addEventListener("keydown", (event) => {
+  if (event.code === "Space") {
+    spacePressed = true;
+    event.preventDefault();
+  }
+});
+window.addEventListener("keyup", (event) => {
+  if (event.code === "Space") spacePressed = false;
+});
+
 pixi.canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   pixi.canvas.setPointerCapture(event.pointerId);
+  const point = viewportPoint(event);
+  pointers.set(event.pointerId, { ...point, type: event.pointerType });
+  if (event.button === 1 || spacePressed) {
+    panPointer = { id: event.pointerId, ...point };
+    return;
+  }
+  if (event.pointerType === "touch" && pointers.size === 2) {
+    activePointer = null;
+    activePoints = [];
+    const [first, second] = [...pointers.values()];
+    pinchStart = {
+      distance: distanceBetween(first, second),
+      zoom,
+      x: (first.x + second.x) / 2,
+      y: (first.y + second.y) / 2,
+    };
+    return;
+  }
   activePointer = { id: event.pointerId, type: pointerKind(event), startedAt: performance.now() };
   activePoints = [toProjectPoint(event)];
 });
 pixi.canvas.addEventListener("pointermove", (event) => {
+  const point = viewportPoint(event);
+  if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { ...point, type: event.pointerType });
+  if (panPointer?.id === event.pointerId) {
+    panX += point.x - panPointer.x;
+    panY += point.y - panPointer.y;
+    panPointer = { id: event.pointerId, ...point };
+    syncViewport();
+    return;
+  }
+  if (pinchStart && pointers.size >= 2) {
+    const [first, second] = [...pointers.values()];
+    const distance = distanceBetween(first, second);
+    const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    zoomAt(pinchStart.zoom * (distance / pinchStart.distance), midpoint);
+    return;
+  }
   if (!activePointer || activePointer.id !== event.pointerId) return;
   activePoints.push(toProjectPoint(event));
   redraw();
   drawStroke(activePoints, currentStyle);
 });
 const finishStroke = (event: PointerEvent): void => {
+  pointers.delete(event.pointerId);
+  if (panPointer?.id === event.pointerId) {
+    panPointer = null;
+    return;
+  }
+  if (pointers.size < 2) pinchStart = null;
   if (!activePointer || activePointer.id !== event.pointerId) return;
   const endedAt = performance.now();
   history.push(cloneProject(project));
@@ -127,6 +233,11 @@ const finishStroke = (event: PointerEvent): void => {
 };
 pixi.canvas.addEventListener("pointerup", finishStroke);
 pixi.canvas.addEventListener("pointercancel", finishStroke);
+pixi.canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const point = { x: event.offsetX, y: event.offsetY };
+  zoomAt(zoom * (event.deltaY < 0 ? 1.1 : 0.9), point);
+}, { passive: false });
 
 const setStatus = (message: string): void => {
   const status = document.querySelector<HTMLParagraphElement>("#status");
@@ -164,6 +275,18 @@ document.querySelector<HTMLButtonElement>("#clear")?.addEventListener("click", (
   project.strokes = [];
   redraw();
   setStatus("Canvas cleared.");
+});
+document.querySelector<HTMLButtonElement>("#zoom-in")?.addEventListener("click", () => {
+  zoomAt(zoom * 1.25, { x: pixi.screen.width / 2, y: pixi.screen.height / 2 });
+});
+document.querySelector<HTMLButtonElement>("#zoom-out")?.addEventListener("click", () => {
+  zoomAt(zoom / 1.25, { x: pixi.screen.width / 2, y: pixi.screen.height / 2 });
+});
+document.querySelector<HTMLButtonElement>("#zoom-reset")?.addEventListener("click", () => {
+  zoom = 1;
+  panX = 0;
+  panY = 0;
+  syncViewport();
 });
 document.querySelector<HTMLButtonElement>("#export-svg")?.addEventListener("click", () => {
   download("svg-draw-me.svg", projectToSvg(project));
@@ -237,12 +360,8 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
 });
 
 const syncScale = (): void => {
-  canvasScale = Math.min(pixi.screen.width / project.width, pixi.screen.height / project.height);
-  canvasOffsetX = (pixi.screen.width - project.width * canvasScale) / 2;
-  canvasOffsetY = (pixi.screen.height - project.height * canvasScale) / 2;
-  viewportLayer.position.set(canvasOffsetX, canvasOffsetY);
-  viewportLayer.scale.set(canvasScale);
-  redraw();
+  fitScale = Math.min(pixi.screen.width / project.width, pixi.screen.height / project.height);
+  syncViewport();
 };
 pixi.renderer.on("resize", syncScale);
 syncScale();

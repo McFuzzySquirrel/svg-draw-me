@@ -27,6 +27,10 @@ export interface Stroke {
 
 export type ShapeKind = "line" | "rectangle" | "ellipse" | "polygon" | "curve";
 
+export type FillTarget =
+  | { type: "stroke"; id: string }
+  | { type: "shape"; id: string };
+
 export interface ShapeStyle {
   stroke: StrokeStyle;
   fill: string | null;

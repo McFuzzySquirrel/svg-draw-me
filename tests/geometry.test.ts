@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isClosedStroke, pointHitsShape, pointHitsStroke, pointInStrokeLoop } from "../src/geometry";
+import { findFillTarget, isClosedStroke, pointHitsShape, pointHitsStroke, pointInStrokeLoop } from "../src/geometry";
+import { createProject } from "../src/document";
 
 describe("whole-object hit testing", () => {
   it("hits a stroke near one of its segments", () => {
@@ -78,5 +79,53 @@ describe("whole-object hit testing", () => {
       },
       2,
     )).toBe(true);
+  });
+
+  it("finds an unfilled shape as a fill target", () => {
+    const project = createProject();
+    project.shapes.push({
+      id: "rectangle",
+      kind: "rectangle",
+      style: {
+        stroke: { color: "#000", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: null,
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { x: 10, y: 20, width: 40, height: 30 },
+    });
+    expect(findFillTarget(project, { x: 30, y: 35 }, 2)).toEqual({ type: "shape", id: "rectangle" });
+  });
+
+  it("prefers the visually topmost shape over a closed stroke", () => {
+    const project = createProject();
+    project.strokes.push({
+      id: "loop",
+      points: [
+        { x: 0, y: 0, pressure: 1, time: 0 },
+        { x: 60, y: 0, pressure: 1, time: 1 },
+        { x: 60, y: 60, pressure: 1, time: 2 },
+        { x: 0, y: 0, pressure: 1, time: 3 },
+      ],
+      style: { color: "#000", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+      fill: null,
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 3,
+    });
+    project.shapes.push({
+      id: "top-shape",
+      kind: "ellipse",
+      style: {
+        stroke: { color: "#000", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: null,
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { cx: 20, cy: 20, rx: 10, ry: 10 },
+    });
+    expect(findFillTarget(project, { x: 20, y: 20 }, 2)).toEqual({ type: "shape", id: "top-shape" });
   });
 });

@@ -1,9 +1,9 @@
 import { Application, Assets, Container, Graphics, Sprite } from "pixi.js";
 import { viewportToProject, zoomTransformAtPoint } from "./coordinates";
-import { appendShape, appendStroke, applyStrokeFill, cloneProject, createProject } from "./document";
+import { appendShape, appendStroke, applyFill, cloneProject, createProject } from "./document";
 import { createSvgBlob } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
-import { isClosedStroke, pointHitsShape, pointHitsStroke, pointInStrokeLoop } from "./geometry";
+import { findFillTarget, isClosedStroke, pointHitsShape, pointHitsStroke } from "./geometry";
 import type { DrawingProject, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle } from "./types";
 import "./styles.css";
 
@@ -22,6 +22,7 @@ let currentStyle: StrokeStyle = {
 let activeTool: "pen" | "eraser" | "fill" | ShapeKind = "pen";
 let fillEnabled = false;
 let fillColor = "#93c5fd";
+let fillMode: "color" | "none" = "color";
 let activePoints: StrokePoint[] = [];
 let activePointer: { id: number; type: PointerKind; startedAt: number } | null = null;
 let drawingLayer: Graphics;
@@ -51,6 +52,13 @@ controls.innerHTML = `
   <span class="control-group" aria-label="Shape fill controls">
     <label for="fill-enabled"><input id="fill-enabled" type="checkbox"> Fill shape</label>
     <label for="fill-color">Fill color <input id="fill-color" type="color" value="${fillColor}"></label>
+    <label for="fill-mode">Bucket action
+      <select id="fill-mode">
+        <option value="color">Apply color</option>
+        <option value="none">No fill</option>
+      </select>
+    </label>
+    <button id="clear-fill" type="button">Clear fill</button>
   </span>
   <button id="undo" type="button">Undo</button>
   <button id="clear" type="button">Clear</button>
@@ -219,16 +227,21 @@ const eraseAt = (point: { x: number; y: number }): void => {
 };
 
 const fillAt = (point: { x: number; y: number }): void => {
-  for (let index = project.strokes.length - 1; index >= 0; index -= 1) {
-    const stroke = project.strokes[index]!;
-    if (stroke.fill || !pointInStrokeLoop(point, stroke)) continue;
-    history.push(cloneProject(project));
-    Object.assign(project, applyStrokeFill(project, stroke.id, fillColor));
-    redraw();
-    setStatus("Closed stroke filled.");
+  const target = findFillTarget(project, point, Math.max(currentStyle.width * 1.5, 8));
+  if (!target) {
+    setStatus("Tap inside a fillable shape or closed hand-drawn loop.");
     return;
   }
-  setStatus("Tap inside a closed hand-drawn loop to fill it.");
+  const fill = fillMode === "color" ? fillColor : null;
+  const next = applyFill(project, target, fill);
+  if (next === project) {
+    setStatus(fill === null ? "That object already has no fill." : "That object already uses this fill color.");
+    return;
+  }
+  history.push(cloneProject(project));
+  Object.assign(project, next);
+  redraw();
+  setStatus(fill === null ? "Fill cleared." : "Fill applied.");
 };
 
 const toProjectPoint = (event: PointerEvent): StrokePoint => {
@@ -418,6 +431,16 @@ document.querySelector<HTMLInputElement>("#fill-enabled")?.addEventListener("cha
 });
 document.querySelector<HTMLInputElement>("#fill-color")?.addEventListener("input", (event) => {
   fillColor = (event.target as HTMLInputElement).value;
+});
+document.querySelector<HTMLSelectElement>("#fill-mode")?.addEventListener("change", (event) => {
+  fillMode = (event.target as HTMLSelectElement).value === "none" ? "none" : "color";
+  setStatus(fillMode === "none" ? "Fill bucket will clear fills." : "Fill bucket will apply the selected color.");
+});
+document.querySelector<HTMLButtonElement>("#clear-fill")?.addEventListener("click", () => {
+  fillMode = "none";
+  const mode = document.querySelector<HTMLSelectElement>("#fill-mode");
+  if (mode) mode.value = "none";
+  setStatus("Fill bucket will clear fills.");
 });
 document.querySelector<HTMLInputElement>("#width")?.addEventListener("input", (event) => {
   const width = Number((event.target as HTMLInputElement).value);

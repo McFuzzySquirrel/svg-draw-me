@@ -36,9 +36,9 @@ Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Poly
 
 Shapes remain first-class objects in the editable project model and export as SVG line, rectangle, ellipse, polygon, or quadratic-path elements.
 
-### Fill a hand-drawn loop
+### Fill and clear objects
 
-Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose **Fill bucket**, choose a **Fill color**, and tap inside the loop. The bucket accepts a small endpoint gap, keeps the original stroke points and metadata, and can be undone. If the tap is outside a closed loop, no fill is applied.
+Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose **Fill bucket**, choose a **Fill color**, and tap inside the loop. The bucket accepts a small endpoint gap, keeps the original stroke points and metadata, and can be undone. Tap inside an existing filled loop or a filled rectangle, ellipse, or polygon to replace its fill. Choose **No fill** or **Clear fill** before tapping to remove an existing fill. Lines, curved lines, open loops, and clicks outside a fillable object are not filled.
 
 ### Mobile menu
 

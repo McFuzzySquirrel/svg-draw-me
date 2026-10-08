@@ -1,4 +1,4 @@
-import type { Shape, Stroke } from "./types";
+import type { DrawingProject, FillTarget, Shape, Stroke } from "./types";
 
 export const FREEHAND_FILL_GAP = 28;
 
@@ -12,6 +12,42 @@ export function isClosedStroke(stroke: Stroke, tolerance = FREEHAND_FILL_GAP): b
 export function pointInStrokeLoop(point: { x: number; y: number }, stroke: Stroke, tolerance = FREEHAND_FILL_GAP): boolean {
   if (!isClosedStroke(stroke, tolerance)) return false;
   return pointInPolygon(point, stroke.points);
+}
+
+export function isFillableShape(shape: Shape): boolean {
+  return shape.kind === "rectangle" || shape.kind === "ellipse" || shape.kind === "polygon";
+}
+
+export function pointInShapeFill(point: { x: number; y: number }, shape: Shape): boolean {
+  if (shape.kind === "rectangle") {
+    const g = shape.geometry;
+    return point.x >= g.x && point.x <= g.x + g.width
+      && point.y >= g.y && point.y <= g.y + g.height;
+  }
+  if (shape.kind === "ellipse") {
+    const g = shape.geometry;
+    return ((point.x - g.cx) / Math.max(g.rx, 1)) ** 2 + ((point.y - g.cy) / Math.max(g.ry, 1)) ** 2 <= 1;
+  }
+  if (shape.kind === "polygon") return pointInPolygon(point, shape.geometry.points);
+  return false;
+}
+
+export function findFillTarget(
+  project: DrawingProject,
+  point: { x: number; y: number },
+  radius: number,
+): FillTarget | null {
+  for (let index = project.shapes.length - 1; index >= 0; index -= 1) {
+    const shape = project.shapes[index]!;
+    if (isFillableShape(shape) && (pointInShapeFill(point, shape) || pointHitsShape(point, shape, radius))) {
+      return { type: "shape", id: shape.id };
+    }
+  }
+  for (let index = project.strokes.length - 1; index >= 0; index -= 1) {
+    const stroke = project.strokes[index]!;
+    if (pointInStrokeLoop(point, stroke)) return { type: "stroke", id: stroke.id };
+  }
+  return null;
 }
 
 export function pointHitsStroke(point: { x: number; y: number }, stroke: Stroke, radius: number): boolean {

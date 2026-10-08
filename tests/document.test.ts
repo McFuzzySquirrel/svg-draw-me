@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendShape, appendStroke, createProject, deserializeProject, serializeProject } from "../src/document";
+import { appendShape, appendStroke, applyFill, createProject, deserializeProject, serializeProject } from "../src/document";
 import { projectToEditableSvg, projectToSvg } from "../src/svg";
 
 describe("stroke-preserving document", () => {
@@ -108,5 +108,46 @@ describe("stroke-preserving document", () => {
       geometry: { cx: 20, cy: 25, rx: 10, ry: 5 },
     });
     expect(projectToSvg(project)).toContain('<ellipse cx="20" cy="25" rx="10" ry="5"');
+  });
+
+  it("sets and clears fills on strokes and shapes", () => {
+    const withStroke = appendStroke(
+      createProject(),
+      [
+        { x: 0, y: 0, pressure: 1, time: 0 },
+        { x: 20, y: 0, pressure: 1, time: 1 },
+        { x: 20, y: 20, pressure: 1, time: 2 },
+        { x: 0, y: 0, pressure: 1, time: 3 },
+      ],
+      { color: "#000000", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+      "mouse",
+      0,
+      3,
+    );
+    const strokeId = withStroke.strokes[0]!.id;
+    const filledStroke = applyFill(withStroke, { type: "stroke", id: strokeId }, "#ff0000");
+    expect(filledStroke.strokes[0]?.fill).toBe("#ff0000");
+    const clearedStroke = applyFill(filledStroke, { type: "stroke", id: strokeId }, null);
+    expect(clearedStroke.strokes[0]?.fill).toBeNull();
+
+    const withShape = appendShape(clearedStroke, {
+      kind: "rectangle",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: null,
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { x: 10, y: 10, width: 20, height: 20 },
+    });
+    const shapeId = withShape.shapes[0]!.id;
+    const filledShape = applyFill(withShape, { type: "shape", id: shapeId }, "#00ff00");
+    expect(filledShape.shapes[0]?.style.fill).toBe("#00ff00");
+    const clearedShape = applyFill(filledShape, { type: "shape", id: shapeId }, null);
+    expect(clearedShape.shapes[0]?.style.fill).toBeNull();
+    expect(projectToSvg(clearedShape)).toContain('fill="none"');
+    expect(applyFill(filledShape, { type: "shape", id: shapeId }, "#00ff00")).toBe(filledShape);
+    expect(applyFill(filledShape, { type: "shape", id: "missing" }, null)).toBe(filledShape);
   });
 });

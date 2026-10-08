@@ -30,7 +30,7 @@ The application currently runs entirely in the browser. Projects are held in mem
 |---|---|
 | Stroke-preserving drawing | Records separate ordered strokes and their point metadata instead of flattening directly to pixels. |
 | Shape tools | Creates first-class lines, rectangles, ellipses, polygons, and curved lines with optional fills. |
-| Freehand fill bucket | Fills tolerant closed hand-drawn loops without flattening their stroke history. |
+| Fill bucket | Fills or clears tolerant closed hand-drawn loops and existing fillable shapes without flattening their geometry or stroke history. |
 | Mobile menu | Collapses the toolbar to maximize drawing space on narrow screens. |
 | Whole-object eraser | Removes a complete touched stroke or shape and supports undo. |
 | Pointer input | Supports mouse, touch, and pen/stylus pointer events. |

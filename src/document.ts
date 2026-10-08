@@ -1,4 +1,4 @@
-import type { DrawingProject, Shape, ShapeDraft, Stroke, StrokePoint, StrokeStyle } from "./types";
+import type { DrawingProject, FillTarget, Shape, ShapeDraft, Stroke, StrokePoint, StrokeStyle } from "./types";
 
 export const DEFAULT_PROJECT_SIZE = { width: 1200, height: 800 };
 
@@ -35,11 +35,20 @@ export function deserializeProject(serialized: string): DrawingProject {
   };
 }
 
-export function applyStrokeFill(project: DrawingProject, strokeId: string, fill: string): DrawingProject {
-  return {
-    ...project,
-    strokes: project.strokes.map((stroke) => stroke.id === strokeId ? { ...stroke, fill } : stroke),
-  };
+export function applyFill(project: DrawingProject, target: FillTarget, fill: string | null): DrawingProject {
+  if (target.type === "stroke") {
+    const index = project.strokes.findIndex((stroke) => stroke.id === target.id);
+    if (index < 0 || project.strokes[index]?.fill === fill) return project;
+    const strokes = [...project.strokes];
+    strokes[index] = { ...strokes[index]!, fill };
+    return { ...project, strokes };
+  }
+
+  const index = project.shapes.findIndex((shape) => shape.id === target.id);
+  if (index < 0 || project.shapes[index]?.style.fill === fill) return project;
+  const shapes = [...project.shapes];
+  shapes[index] = { ...shapes[index]!, style: { ...shapes[index]!.style, fill } };
+  return { ...project, shapes };
 }
 
 export function appendShape(project: DrawingProject, shape: ShapeDraft): DrawingProject {

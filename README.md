@@ -152,6 +152,7 @@ The following are planned or known gaps, not shipped features:
 - More advanced stroke smoothing and pressure-based width rendering.
 - Browser-level interaction tests.
 - More complete handling or fallback behavior for SVG filters, masks, CSS, and external assets.
+- [Advanced SVG and animation roadmap](docs/feature-plans/advanced-svg-animation.md).
 
 ## License
 

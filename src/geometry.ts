@@ -1,5 +1,19 @@
 import type { Shape, Stroke } from "./types";
 
+export const FREEHAND_FILL_GAP = 28;
+
+export function isClosedStroke(stroke: Stroke, tolerance = FREEHAND_FILL_GAP): boolean {
+  if (stroke.points.length < 3) return false;
+  const first = stroke.points[0]!;
+  const last = stroke.points[stroke.points.length - 1]!;
+  return Math.hypot(last.x - first.x, last.y - first.y) <= tolerance;
+}
+
+export function pointInStrokeLoop(point: { x: number; y: number }, stroke: Stroke, tolerance = FREEHAND_FILL_GAP): boolean {
+  if (!isClosedStroke(stroke, tolerance)) return false;
+  return pointInPolygon(point, stroke.points);
+}
+
 export function pointHitsStroke(point: { x: number; y: number }, stroke: Stroke, radius: number): boolean {
   for (let index = 1; index < stroke.points.length; index += 1) {
     if (distanceToSegment(point, stroke.points[index - 1]!, stroke.points[index]!) <= radius) return true;
@@ -48,21 +62,22 @@ export function pointHitsShape(point: { x: number; y: number }, shape: Shape, ra
     return g.points.some((current, index) => distanceToSegment(point, current, g.points[(index + 1) % g.points.length]!) <= radius);
   }
 
-  function pointInPolygon(point: { x: number; y: number }, points: Array<{ x: number; y: number }>): boolean {
-    let inside = false;
-    for (let index = 0, previous = points.length - 1; index < points.length; previous = index++) {
-      const current = points[index]!;
-      const prior = points[previous]!;
-      const intersects = current.y > point.y !== prior.y > point.y
-        && point.x < ((prior.x - current.x) * (point.y - current.y)) / (prior.y - current.y) + current.x;
-      if (intersects) inside = !inside;
-    }
-    return inside;
-  }
   return false;
 }
 
-function distanceToSegment(point: { x: number; y: number }, start: { x: number; y: number }, end: { x: number; y: number }): number {
+export function pointInPolygon(point: { x: number; y: number }, points: Array<{ x: number; y: number }>): boolean {
+  let inside = false;
+  for (let index = 0, previous = points.length - 1; index < points.length; previous = index++) {
+    const current = points[index]!;
+    const prior = points[previous]!;
+    const intersects = current.y > point.y !== prior.y > point.y
+      && point.x < ((prior.x - current.x) * (point.y - current.y)) / (prior.y - current.y) + current.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+export function distanceToSegment(point: { x: number; y: number }, start: { x: number; y: number }, end: { x: number; y: number }): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   if (dx === 0 && dy === 0) return Math.hypot(point.x - start.x, point.y - start.y);

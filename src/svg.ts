@@ -30,7 +30,9 @@ function strokeToPath(stroke: Stroke): string {
   const [first, ...rest] = stroke.points;
   if (!first) return "";
   const commands = [`M ${first.x} ${first.y}`, ...rest.map((point) => `L ${point.x} ${point.y}`)].join(" ");
-  return `<path d="${commands}" fill="none" stroke="${escapeAttribute(stroke.style.color)}" stroke-width="${stroke.style.width}" stroke-opacity="${stroke.style.opacity}" stroke-linecap="${stroke.style.lineCap}" stroke-linejoin="${stroke.style.lineJoin}"/>`;
+  const fill = stroke.fill ? escapeAttribute(stroke.fill) : "none";
+  const close = stroke.fill ? " Z" : "";
+  return `<path d="${commands}${close}" fill="${fill}" stroke="${escapeAttribute(stroke.style.color)}" stroke-width="${stroke.style.width}" stroke-opacity="${stroke.style.opacity}" stroke-linecap="${stroke.style.lineCap}" stroke-linejoin="${stroke.style.lineJoin}"/>`;
 }
 
 function shapeToSvg(shape: Shape): string {

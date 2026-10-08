@@ -37,6 +37,25 @@ describe("stroke-preserving document", () => {
     expect(svg).toContain("M 0 0 L 10 10");
   });
 
+  it("exports a filled freehand loop as a closed SVG path", () => {
+    const project = appendStroke(
+      createProject(),
+      [
+        { x: 0, y: 0, pressure: 1, time: 0 },
+        { x: 20, y: 0, pressure: 1, time: 1 },
+        { x: 20, y: 20, pressure: 1, time: 2 },
+        { x: 0, y: 0, pressure: 1, time: 3 },
+      ],
+      { color: "#ff0000", width: 3, opacity: 1, lineCap: "round", lineJoin: "round" },
+      "mouse",
+      0,
+      3,
+      "#00ff00",
+    );
+    expect(projectToSvg(project)).toContain('fill="#00ff00"');
+    expect(projectToSvg(project)).toContain("L 0 0 Z");
+  });
+
   it("includes editable project metadata in the editable export", () => {
     const project = appendStroke(
       createProject(),

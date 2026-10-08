@@ -1,10 +1,10 @@
 import { Application, Assets, Container, Graphics, Sprite } from "pixi.js";
 import { viewportToProject, zoomTransformAtPoint } from "./coordinates";
-import { appendShape, appendStroke, cloneProject, createProject } from "./document";
+import { appendShape, appendStroke, applyStrokeFill, cloneProject, createProject } from "./document";
 import { createSvgBlob } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
-import { pointHitsShape, pointHitsStroke } from "./geometry";
-import type { DrawingProject, PointerKind, Shape, ShapeDraft, ShapeKind, StrokePoint, StrokeStyle } from "./types";
+import { isClosedStroke, pointHitsShape, pointHitsStroke, pointInStrokeLoop } from "./geometry";
+import type { DrawingProject, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle } from "./types";
 import "./styles.css";
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -19,7 +19,7 @@ let currentStyle: StrokeStyle = {
   lineCap: "round",
   lineJoin: "round",
 };
-let activeTool: "pen" | "eraser" | ShapeKind = "pen";
+let activeTool: "pen" | "eraser" | "fill" | ShapeKind = "pen";
 let fillEnabled = false;
 let fillColor = "#93c5fd";
 let activePoints: StrokePoint[] = [];
@@ -42,10 +42,12 @@ let pinchStart: { distance: number; zoom: number; x: number; y: number } | null 
 const controls = document.createElement("section");
 controls.className = "controls";
 controls.innerHTML = `
+  <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="true" aria-controls="drawing-controls">Menu</button>
+  <span id="drawing-controls" class="toolbar-controls">
   <div class="brand"><strong>SVG Draw Me</strong><span>stroke-preserving sketchbook</span></div>
   <label>Color <input id="color" type="color" value="${currentStyle.color}"></label>
   <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
-  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="eraser">Eraser</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
+  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
   <span class="control-group" aria-label="Shape fill controls">
     <label for="fill-enabled"><input id="fill-enabled" type="checkbox"> Fill shape</label>
     <label for="fill-color">Fill color <input id="fill-color" type="color" value="${fillColor}"></label>
@@ -63,8 +65,19 @@ controls.innerHTML = `
   <button id="export-svg" type="button">Download SVG</button>
   <button id="export-editable" type="button">Download editable</button>
   <p id="status" role="status">Draw with a mouse, finger, or stylus.</p>
+  </span>
 `;
 appRoot.append(controls);
+const menuToggle = controls.querySelector<HTMLButtonElement>("#menu-toggle");
+const toolbarControls = controls.querySelector<HTMLSpanElement>("#drawing-controls");
+const setMenuOpen = (open: boolean): void => {
+  controls.classList.toggle("menu-collapsed", !open);
+  menuToggle?.setAttribute("aria-expanded", String(open));
+  if (menuToggle) menuToggle.textContent = open ? "Hide menu" : "Menu";
+  toolbarControls?.setAttribute("aria-hidden", String(!open));
+};
+setMenuOpen(!window.matchMedia("(max-width: 640px)").matches);
+menuToggle?.addEventListener("click", () => setMenuOpen(controls.classList.contains("menu-collapsed")));
 
 const workspace = document.createElement("main");
 workspace.className = "workspace";
@@ -88,9 +101,7 @@ pixi.stage.addChild(viewportLayer);
 
 const redraw = (): void => {
   drawingLayer.clear();
-  for (const stroke of project.strokes) {
-    drawStroke(stroke.points, stroke.style);
-  }
+  for (const stroke of project.strokes) drawRecordedStroke(stroke);
   for (const shape of project.shapes) drawShape(shape);
 };
 
@@ -105,6 +116,21 @@ const drawStroke = (points: StrokePoint[], style: StrokeStyle): void => {
     alpha: style.opacity,
     cap: style.lineCap,
     join: style.lineJoin,
+  });
+};
+
+const drawRecordedStroke = (stroke: Stroke): void => {
+  const [first, ...rest] = stroke.points;
+  if (!first) return;
+  drawingLayer.moveTo(first.x, first.y);
+  for (const point of rest) drawingLayer.lineTo(point.x, point.y);
+  if (stroke.fill && isClosedStroke(stroke)) drawingLayer.closePath().fill(stroke.fill);
+  drawingLayer.stroke({
+    width: stroke.style.width,
+    color: stroke.style.color,
+    alpha: stroke.style.opacity,
+    cap: stroke.style.lineCap,
+    join: stroke.style.lineJoin,
   });
 };
 
@@ -192,6 +218,19 @@ const eraseAt = (point: { x: number; y: number }): void => {
   setStatus("Object erased.");
 };
 
+const fillAt = (point: { x: number; y: number }): void => {
+  for (let index = project.strokes.length - 1; index >= 0; index -= 1) {
+    const stroke = project.strokes[index]!;
+    if (stroke.fill || !pointInStrokeLoop(point, stroke)) continue;
+    history.push(cloneProject(project));
+    Object.assign(project, applyStrokeFill(project, stroke.id, fillColor));
+    redraw();
+    setStatus("Closed stroke filled.");
+    return;
+  }
+  setStatus("Tap inside a closed hand-drawn loop to fill it.");
+};
+
 const toProjectPoint = (event: PointerEvent): StrokePoint => {
   const rect = pixi.canvas.getBoundingClientRect();
   const point = viewportToProject(event.clientX, event.clientY, rect, {
@@ -211,7 +250,7 @@ const pointerKind = (event: PointerEvent): PointerKind =>
   event.pointerType === "pen" ? "pen" : event.pointerType === "touch" ? "touch" : "mouse";
 
 const isShapeTool = (tool: typeof activeTool): tool is ShapeKind =>
-  tool !== "pen" && tool !== "eraser";
+  tool !== "pen" && tool !== "eraser" && tool !== "fill";
 
 const viewportPoint = (event: PointerEvent): { x: number; y: number } => {
   const rect = pixi.canvas.getBoundingClientRect();
@@ -288,6 +327,10 @@ pixi.canvas.addEventListener("pointerdown", (event) => {
   }
   if (activeTool === "eraser") {
     eraseAt(toProjectPoint(event));
+    return;
+  }
+  if (activeTool === "fill") {
+    fillAt(toProjectPoint(event));
     return;
   }
   activePointer = { id: event.pointerId, type: pointerKind(event), startedAt: performance.now() };

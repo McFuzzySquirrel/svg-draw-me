@@ -36,6 +36,14 @@ Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Poly
 
 Shapes remain first-class objects in the editable project model and export as SVG line, rectangle, ellipse, polygon, or quadratic-path elements.
 
+### Fill a hand-drawn loop
+
+Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose **Fill bucket**, choose a **Fill color**, and tap inside the loop. The bucket accepts a small endpoint gap, keeps the original stroke points and metadata, and can be undone. If the tap is outside a closed loop, no fill is applied.
+
+### Mobile menu
+
+On a narrow screen, use **Menu** to show the controls and **Hide menu** to collapse them and give the canvas more space. The drawing remains unchanged when the menu is collapsed.
+
 ### Erase
 
 Choose **Eraser**, then touch a stroke or shape. The complete object is removed and can be restored with **Undo**. The current eraser removes whole objects rather than splitting a stroke into partial segments.

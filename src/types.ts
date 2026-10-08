@@ -19,6 +19,7 @@ export interface Stroke {
   id: string;
   points: StrokePoint[];
   style: StrokeStyle;
+  fill: string | null;
   pointerType: PointerKind;
   startedAt: number;
   endedAt: number;

@@ -134,7 +134,9 @@ To report a vulnerability, open a private GitHub security report for the reposit
 
 ## How to Contribute
 
-There is no `CONTRIBUTING.md` yet. Contributions should:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, validation
+commands, pull request guidance, and contribution licensing. Contributions
+should:
 
 1. Create a focused change with tests where behavior changes.
 2. Preserve the separation between the document model, viewport rendering, and SVG export.
@@ -153,7 +155,9 @@ The following are planned or known gaps, not shipped features:
 
 ## License
 
-This project is licensed under the terms in [LICENSE](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE). See the
+full license text for the terms that apply to using, modifying, and
+redistributing the project.
 
 ## Acknowledgements
 

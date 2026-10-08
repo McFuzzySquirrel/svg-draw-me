@@ -28,10 +28,17 @@ export function deserializeProject(serialized: string): DrawingProject {
     version: 1,
     width: finiteOr(candidate.width, DEFAULT_PROJECT_SIZE.width),
     height: finiteOr(candidate.height, DEFAULT_PROJECT_SIZE.height),
-    strokes: candidate.strokes,
+    strokes: candidate.strokes.map((stroke) => ({ ...stroke, fill: stroke.fill ?? null })),
     shapes: Array.isArray(candidate.shapes) ? candidate.shapes : [],
     rasterReferences: Array.isArray(candidate.rasterReferences) ? candidate.rasterReferences : [],
     importedSvgs: Array.isArray(candidate.importedSvgs) ? candidate.importedSvgs : [],
+  };
+}
+
+export function applyStrokeFill(project: DrawingProject, strokeId: string, fill: string): DrawingProject {
+  return {
+    ...project,
+    strokes: project.strokes.map((stroke) => stroke.id === strokeId ? { ...stroke, fill } : stroke),
   };
 }
 
@@ -49,6 +56,7 @@ export function appendStroke(
   pointerType: Stroke["pointerType"],
   startedAt: number,
   endedAt: number,
+  fill: string | null = null,
 ): DrawingProject {
   if (points.length < 2) return project;
   return {
@@ -59,6 +67,7 @@ export function appendStroke(
         id: crypto.randomUUID(),
         points,
         style,
+        fill,
         pointerType,
         startedAt,
         endedAt,

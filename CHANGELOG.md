@@ -14,6 +14,8 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 - First-class line, rectangle, ellipse, polygon, and curved-line tools.
 - Optional shape fills.
+- Fill bucket for tolerant closed freehand loops.
+- Collapsible mobile toolbar menu.
 - Whole-object eraser with undo support.
 
 ## [0.1.0] - 2026-10-08

@@ -38,6 +38,10 @@ The viewport now keeps document coordinates stable while providing 25%–800% zo
 
 The Vite app now uses relative asset paths and includes a GitHub Actions workflow that runs tests, builds the production bundle, uploads `dist/`, and deploys it to GitHub Pages on pushes to `main` or manual workflow dispatch.
 
+## Follow-up feature — Mobile menu and freehand fill bucket (complete)
+
+The toolbar can now collapse on narrow screens through an accessible Menu/Hide menu toggle. A Fill bucket tool fills tolerant closed freehand loops while preserving the original stroke points and metadata; filled loops render, export, and undo as editable stroke objects.
+
 ## Follow-up feature — Eraser and first-class shape tools (complete)
 
 The document model now stores first-class lines, rectangles, ellipses, polygons, and quadratic curved lines alongside freehand strokes. The toolbar exposes Pen, Eraser, shape selection, outline controls, and optional fills. The eraser removes a complete touched object and participates in undo. Shape geometry is rendered through PixiJS and exported to standard and editable SVG.

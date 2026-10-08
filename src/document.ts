@@ -1,4 +1,4 @@
-import type { DrawingProject, Stroke, StrokePoint, StrokeStyle } from "./types";
+import type { DrawingProject, Shape, ShapeDraft, Stroke, StrokePoint, StrokeStyle } from "./types";
 
 export const DEFAULT_PROJECT_SIZE = { width: 1200, height: 800 };
 
@@ -6,7 +6,7 @@ export function createProject(
   width = DEFAULT_PROJECT_SIZE.width,
   height = DEFAULT_PROJECT_SIZE.height,
 ): DrawingProject {
-  return { version: 1, width, height, strokes: [], rasterReferences: [], importedSvgs: [] };
+  return { version: 1, width, height, strokes: [], shapes: [], rasterReferences: [], importedSvgs: [] };
 }
 
 export function cloneProject(project: DrawingProject): DrawingProject {
@@ -29,8 +29,16 @@ export function deserializeProject(serialized: string): DrawingProject {
     width: finiteOr(candidate.width, DEFAULT_PROJECT_SIZE.width),
     height: finiteOr(candidate.height, DEFAULT_PROJECT_SIZE.height),
     strokes: candidate.strokes,
+    shapes: Array.isArray(candidate.shapes) ? candidate.shapes : [],
     rasterReferences: Array.isArray(candidate.rasterReferences) ? candidate.rasterReferences : [],
     importedSvgs: Array.isArray(candidate.importedSvgs) ? candidate.importedSvgs : [],
+  };
+}
+
+export function appendShape(project: DrawingProject, shape: ShapeDraft): DrawingProject {
+  return {
+    ...project,
+    shapes: [...project.shapes, { ...shape, id: crypto.randomUUID() } as Shape],
   };
 }
 

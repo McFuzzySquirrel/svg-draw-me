@@ -34,6 +34,10 @@ Uploaded SVG markup now loads through an `image/svg+xml` Blob URL and PixiJS’s
 
 The viewport now keeps document coordinates stable while providing 25%–800% zoom, visible zoom controls, pointer-centered wheel zoom, two-finger pinch zoom, and Space/middle-mouse panning. Drawing strokes and imported references share the same transformed project-space viewport.
 
+## Follow-up feature — Eraser and first-class shape tools (complete)
+
+The document model now stores first-class lines, rectangles, ellipses, polygons, and quadratic curved lines alongside freehand strokes. The toolbar exposes Pen, Eraser, shape selection, outline controls, and optional fills. The eraser removes a complete touched object and participates in undo. Shape geometry is rendered through PixiJS and exported to standard and editable SVG.
+
 ## Phase 1 — Foundation and document model
 
 ### Scope

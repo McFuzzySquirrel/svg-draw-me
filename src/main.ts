@@ -1,9 +1,10 @@
 import { Application, Assets, Container, Graphics, Sprite } from "pixi.js";
 import { viewportToProject, zoomTransformAtPoint } from "./coordinates";
-import { appendStroke, cloneProject, createProject } from "./document";
+import { appendShape, appendStroke, cloneProject, createProject } from "./document";
 import { createSvgBlob } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
-import type { DrawingProject, PointerKind, StrokePoint, StrokeStyle } from "./types";
+import { pointHitsShape, pointHitsStroke } from "./geometry";
+import type { DrawingProject, PointerKind, Shape, ShapeDraft, ShapeKind, StrokePoint, StrokeStyle } from "./types";
 import "./styles.css";
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -18,6 +19,9 @@ let currentStyle: StrokeStyle = {
   lineCap: "round",
   lineJoin: "round",
 };
+let activeTool: "pen" | "eraser" | ShapeKind = "pen";
+let fillEnabled = false;
+let fillColor = "#93c5fd";
 let activePoints: StrokePoint[] = [];
 let activePointer: { id: number; type: PointerKind; startedAt: number } | null = null;
 let drawingLayer: Graphics;
@@ -41,6 +45,8 @@ controls.innerHTML = `
   <div class="brand"><strong>SVG Draw Me</strong><span>stroke-preserving sketchbook</span></div>
   <label>Color <input id="color" type="color" value="${currentStyle.color}"></label>
   <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
+  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="eraser">Eraser</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
+  <label>Fill <input id="fill-enabled" type="checkbox"><input id="fill-color" type="color" value="${fillColor}"></label>
   <button id="undo" type="button">Undo</button>
   <button id="clear" type="button">Clear</button>
   <span class="zoom-controls" aria-label="Zoom controls">
@@ -82,6 +88,7 @@ const redraw = (): void => {
   for (const stroke of project.strokes) {
     drawStroke(stroke.points, stroke.style);
   }
+  for (const shape of project.shapes) drawShape(shape);
 };
 
 const drawStroke = (points: StrokePoint[], style: StrokeStyle): void => {
@@ -96,6 +103,90 @@ const drawStroke = (points: StrokePoint[], style: StrokeStyle): void => {
     cap: style.lineCap,
     join: style.lineJoin,
   });
+};
+
+const drawShape = (shape: Shape): void => {
+  const fill = shape.style.fill ?? undefined;
+  const stroke = { width: shape.style.stroke.width, color: shape.style.stroke.color, alpha: shape.style.stroke.opacity, cap: shape.style.stroke.lineCap, join: shape.style.stroke.lineJoin };
+  if (shape.kind === "line") {
+    const g = shape.geometry;
+    drawingLayer.moveTo(g.x1, g.y1).lineTo(g.x2, g.y2).stroke(stroke);
+  }
+  if (shape.kind === "rectangle") {
+    const g = shape.geometry;
+    drawingLayer.rect(g.x, g.y, g.width, g.height);
+    if (fill) drawingLayer.fill(fill);
+    drawingLayer.stroke(stroke);
+  }
+  if (shape.kind === "ellipse") {
+    const g = shape.geometry;
+    drawingLayer.ellipse(g.cx, g.cy, g.rx, g.ry);
+    if (fill) drawingLayer.fill(fill);
+    drawingLayer.stroke(stroke);
+  }
+  if (shape.kind === "polygon") {
+    const g = shape.geometry;
+    drawingLayer.poly(g.points.flatMap((point) => [point.x, point.y]), true);
+    if (fill) drawingLayer.fill(fill);
+    drawingLayer.stroke(stroke);
+  }
+  if (shape.kind === "curve") {
+    const g = shape.geometry;
+    drawingLayer.moveTo(g.x1, g.y1).quadraticCurveTo(g.cx, g.cy, g.x2, g.y2).stroke(stroke);
+  }
+};
+
+const shapeFromPoints = (kind: ShapeKind, start: StrokePoint, end: StrokePoint): ShapeDraft => {
+  const style = { stroke: currentStyle, fill: fillEnabled && kind !== "line" && kind !== "curve" ? fillColor : null };
+  const meta = { style, pointerType: activePointer?.type ?? "mouse", startedAt: activePointer?.startedAt ?? start.time, endedAt: end.time };
+  if (kind === "line") return { ...meta, kind, geometry: { x1: start.x, y1: start.y, x2: end.x, y2: end.y } };
+  if (kind === "rectangle") return { ...meta, kind, geometry: { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) } };
+  if (kind === "ellipse") return { ...meta, kind, geometry: { cx: (start.x + end.x) / 2, cy: (start.y + end.y) / 2, rx: Math.abs(end.x - start.x) / 2, ry: Math.abs(end.y - start.y) / 2 } };
+  if (kind === "curve") return { ...meta, kind, geometry: { x1: start.x, y1: start.y, cx: (start.x + end.x) / 2, cy: Math.min(start.y, end.y) - Math.abs(end.x - start.x) / 3, x2: end.x, y2: end.y } };
+  return { ...meta, kind: "polygon", geometry: { points: [start, end] } };
+};
+
+const shapeFromPointList = (kind: ShapeKind, points: StrokePoint[]): ShapeDraft => {
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  if (kind === "polygon") {
+    return {
+      kind,
+      style: { stroke: currentStyle, fill: fillEnabled ? fillColor : null },
+      pointerType: activePointer?.type ?? "mouse",
+      startedAt: activePointer?.startedAt ?? first.time,
+      endedAt: last.time,
+      geometry: { points: points.map(({ x, y }) => ({ x, y })) },
+    };
+  }
+  return shapeFromPoints(kind, first, last);
+};
+
+const eraseAt = (point: { x: number; y: number }): void => {
+  const radius = Math.max(currentStyle.width * 1.5, 8);
+  let strokeIndex = -1;
+  for (let index = project.strokes.length - 1; index >= 0; index -= 1) {
+    if (pointHitsStroke(point, project.strokes[index]!, radius)) {
+      strokeIndex = index;
+      break;
+    }
+  }
+  let shapeIndex = -1;
+  for (let index = project.shapes.length - 1; index >= 0; index -= 1) {
+    if (pointHitsShape(point, project.shapes[index]!, radius)) {
+      shapeIndex = index;
+      break;
+    }
+  }
+  if (strokeIndex < 0 && shapeIndex < 0) {
+    setStatus("Nothing to erase.");
+    return;
+  }
+  history.push(cloneProject(project));
+  if (shapeIndex > strokeIndex) project.shapes.splice(shapeIndex, 1);
+  else project.strokes.splice(strokeIndex, 1);
+  redraw();
+  setStatus("Object erased.");
 };
 
 const toProjectPoint = (event: PointerEvent): StrokePoint => {
@@ -115,6 +206,9 @@ const toProjectPoint = (event: PointerEvent): StrokePoint => {
 
 const pointerKind = (event: PointerEvent): PointerKind =>
   event.pointerType === "pen" ? "pen" : event.pointerType === "touch" ? "touch" : "mouse";
+
+const isShapeTool = (tool: typeof activeTool): tool is ShapeKind =>
+  tool !== "pen" && tool !== "eraser";
 
 const viewportPoint = (event: PointerEvent): { x: number; y: number } => {
   const rect = pixi.canvas.getBoundingClientRect();
@@ -189,6 +283,10 @@ pixi.canvas.addEventListener("pointerdown", (event) => {
     };
     return;
   }
+  if (activeTool === "eraser") {
+    eraseAt(toProjectPoint(event));
+    return;
+  }
   activePointer = { id: event.pointerId, type: pointerKind(event), startedAt: performance.now() };
   activePoints = [toProjectPoint(event)];
 });
@@ -210,9 +308,13 @@ pixi.canvas.addEventListener("pointermove", (event) => {
     return;
   }
   if (!activePointer || activePointer.id !== event.pointerId) return;
-  activePoints.push(toProjectPoint(event));
+  const nextPoint = toProjectPoint(event);
+  if (activeTool === "pen") activePoints.push(nextPoint);
+  else if (activeTool === "polygon") activePoints.push(nextPoint);
+  else activePoints = [activePoints[0]!, nextPoint];
   redraw();
-  drawStroke(activePoints, currentStyle);
+  if (activeTool === "pen") drawStroke(activePoints, currentStyle);
+  else if (activePoints.length > 1 && isShapeTool(activeTool)) drawShape({ ...shapeFromPointList(activeTool, activePoints), id: "preview" } as Shape);
 });
 const finishStroke = (event: PointerEvent): void => {
   pointers.delete(event.pointerId);
@@ -224,12 +326,17 @@ const finishStroke = (event: PointerEvent): void => {
   if (!activePointer || activePointer.id !== event.pointerId) return;
   const endedAt = performance.now();
   history.push(cloneProject(project));
-  const next = appendStroke(project, activePoints, currentStyle, activePointer.type, activePointer.startedAt, endedAt);
-  Object.assign(project, next);
+  if (activeTool === "pen") {
+    const next = appendStroke(project, activePoints, currentStyle, activePointer.type, activePointer.startedAt, endedAt);
+    Object.assign(project, next);
+  } else if (activePoints.length > 1 && isShapeTool(activeTool)) {
+    const next = appendShape(project, shapeFromPointList(activeTool, activePoints));
+    Object.assign(project, next);
+  }
   activePointer = null;
   activePoints = [];
   redraw();
-  setStatus(`${project.strokes.length} stroke${project.strokes.length === 1 ? "" : "s"} recorded.`);
+  setStatus(`${project.strokes.length + project.shapes.length} object${project.strokes.length + project.shapes.length === 1 ? "" : "s"} recorded.`);
 };
 pixi.canvas.addEventListener("pointerup", finishStroke);
 pixi.canvas.addEventListener("pointercancel", finishStroke);
@@ -256,6 +363,16 @@ const download = (filename: string, content: string, type = "image/svg+xml"): vo
 document.querySelector<HTMLInputElement>("#color")?.addEventListener("input", (event) => {
   currentStyle = { ...currentStyle, color: (event.target as HTMLInputElement).value };
 });
+document.querySelector<HTMLSelectElement>("#tool")?.addEventListener("change", (event) => {
+  activeTool = (event.target as HTMLSelectElement).value as typeof activeTool;
+  setStatus(`${activeTool} tool selected.`);
+});
+document.querySelector<HTMLInputElement>("#fill-enabled")?.addEventListener("change", (event) => {
+  fillEnabled = (event.target as HTMLInputElement).checked;
+});
+document.querySelector<HTMLInputElement>("#fill-color")?.addEventListener("input", (event) => {
+  fillColor = (event.target as HTMLInputElement).value;
+});
 document.querySelector<HTMLInputElement>("#width")?.addEventListener("input", (event) => {
   const width = Number((event.target as HTMLInputElement).value);
   currentStyle = { ...currentStyle, width };
@@ -270,9 +387,10 @@ document.querySelector<HTMLButtonElement>("#undo")?.addEventListener("click", ()
   setStatus("Last stroke removed.");
 });
 document.querySelector<HTMLButtonElement>("#clear")?.addEventListener("click", () => {
-  if (!project.strokes.length) return;
+  if (!project.strokes.length && !project.shapes.length) return;
   history.push(cloneProject(project));
   project.strokes = [];
+  project.shapes = [];
   redraw();
   setStatus("Canvas cleared.");
 });

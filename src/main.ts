@@ -3,9 +3,22 @@ import { evaluateAnimation } from "./animation";
 import { clampProjectPoint, viewportToProject, zoomTransformAtPoint } from "./coordinates";
 import { appendShape, appendStroke, applyFill, cloneProject, createProject, deserializeProject, dimensionsForBounds, serializeProject } from "./document";
 import { createSvgBlob, findUnsupportedSvgFeatures, getSvgDimensions } from "./imports";
+import { groupSelection as groupProjectSelection, GroupingError, ungroupSelection as ungroupProjectSelection } from "./grouping";
 import { projectToEditableSvg, projectToSvg } from "./svg";
 import { findFillTarget, inverseTransformPoint, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke } from "./geometry";
 import { parseEditablePath } from "./path";
+import {
+  applyGroupTransform,
+  boundsForTarget,
+  boundsIntersect,
+  normalizeSelection,
+  selectableTargets,
+  targetKey,
+  unionBounds,
+  type SelectionBounds,
+  type SelectionTarget,
+  type SelectionTargetType,
+} from "./selection";
 import { applyProjectTransform, createProjectLayerContainers } from "./transforms";
 import type { DrawingProject, GradientPaint, PathCommand, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle, TextObject } from "./types";
 import "./styles.css";
@@ -22,7 +35,7 @@ let currentStyle: StrokeStyle = {
   lineCap: "round",
   lineJoin: "round",
 };
-let activeTool: "pen" | "eraser" | "fill" | "pan" | "text" | ShapeKind = "pen";
+let activeTool: "pen" | "eraser" | "fill" | "pan" | "text" | "select" | ShapeKind = "pen";
 let fillEnabled = false;
 let fillColor = "#93c5fd";
 let gradientEnabled = false;
@@ -34,6 +47,7 @@ let activePoints: StrokePoint[] = [];
 let activePointer: { id: number; type: PointerKind; startedAt: number } | null = null;
 let drawingLayer: Container;
 let previewLayer: Graphics;
+let selectionLayer: Graphics;
 let referencesLayer: Container;
 let viewportLayer: Container;
 let gridLayer: Graphics;
@@ -51,6 +65,15 @@ let spacePressed = false;
 let panPointer: { id: number; x: number; y: number } | null = null;
 const pointers = new Map<number, { x: number; y: number; type: string }>();
 let pinchStart: { distance: number; zoom: number; x: number; y: number; panX: number; panY: number } | null = null;
+let selection: SelectionTarget[] = [];
+let selectionDrag: {
+  mode: "marquee" | "move" | "resize" | "rotate";
+  start: { x: number; y: number };
+  bounds: SelectionBounds;
+  baseline: DrawingProject;
+  changed: boolean;
+} | null = null;
+let selectionClipboard: { project: DrawingProject; targets: SelectionTarget[] } | null = null;
 let referenceBounds = new Map<string, { x: number; y: number; width: number; height: number }>();
 let referenceRenderVersion = 0;
 let animationElapsed = 0;
@@ -105,7 +128,7 @@ controls.innerHTML = `
   <label>Canvas width <input id="canvas-width" type="number" min="1" step="1"></label>
   <label>Canvas height <input id="canvas-height" type="number" min="1" step="1"></label>
   <label>Grid size <input id="grid-size" type="number" min="1" step="1"></label>
-  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="text">Text</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option><option value="path">Path</option></select></label>
+  <label>Tool <select id="tool"><option value="select">Select</option><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="text">Text</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option><option value="path">Path</option></select></label>
   <label>Text <input id="text-content" type="text" maxlength="10000" value="Text"></label>
   <label>Text size <input id="text-size" type="number" min="1" step="1" value="32"></label>
   <label>Font <input id="text-font" type="text" value="Inter, sans-serif"></label>
@@ -129,6 +152,12 @@ controls.innerHTML = `
   </span>
   <button id="undo" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
   <button id="clear" type="button" aria-label="Clear canvas" title="Clear canvas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
+  <button id="selection-delete" type="button" aria-label="Delete selected objects" title="Delete selected objects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
+  <button id="selection-flip-x" type="button" aria-label="Flip selection horizontally" title="Flip selection horizontally">Flip X</button>
+  <button id="selection-flip-y" type="button" aria-label="Flip selection vertically" title="Flip selection vertically">Flip Y</button>
+  <button id="selection-rotate" type="button" aria-label="Rotate selection 90 degrees" title="Rotate selection 90 degrees">Rotate</button>
+  <button id="selection-group" type="button" aria-label="Group selection" title="Group selection">Group</button>
+  <button id="selection-ungroup" type="button" aria-label="Ungroup selection" title="Ungroup selection">Ungroup</button>
   <button id="grid-toggle" type="button" aria-pressed="false" aria-label="Show grid" title="Show grid"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16"/></svg></button>
   <span class="zoom-controls" aria-label="Zoom controls">
     <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
@@ -228,6 +257,7 @@ const categoryGroups: Record<string, Array<{ title: string; selectors: string[] 
   Canvas: [
     { title: "Canvas", selectors: ["#canvas-width", "#canvas-height"] },
     { title: "Grid", selectors: ["#grid-size", "#grid-toggle"] },
+    { title: "Selection", selectors: ["#selection-delete", "#selection-flip-x", "#selection-flip-y", "#selection-rotate", "#selection-group", "#selection-ungroup"] },
     { title: "History and zoom", selectors: ["#clear", ".zoom-controls"] },
   ],
   Files: [
@@ -511,16 +541,59 @@ canvasHost.appendChild(pixi.canvas);
 pixi.stage.eventMode = "static";
 pixi.stage.hitArea = pixi.screen;
 viewportLayer = new Container();
+viewportLayer.sortableChildren = true;
 referencesLayer = new Container();
 gridLayer = new Graphics();
 drawingLayer = new Container();
 previewLayer = new Graphics();
+selectionLayer = new Graphics();
+selectionLayer.eventMode = "none";
+selectionLayer.zIndex = Number.MAX_SAFE_INTEGER;
 drawingLayer.addChild(previewLayer);
-viewportLayer.addChild(referencesLayer, gridLayer, drawingLayer);
+viewportLayer.addChild(referencesLayer, gridLayer, drawingLayer, selectionLayer);
 pixi.stage.addChild(viewportLayer);
 viewportMask = new Graphics().rect(0, 0, project.width, project.height).fill("#ffffff");
 viewportMask.renderable = false;
 viewportLayer.mask = viewportMask;
+
+const redrawSelectionOverlay = (): void => {
+  selectionLayer.visible = true;
+  selectionLayer.renderable = true;
+  selectionLayer.clear();
+  if (selection.length > 0) {
+    const bounds = unionBounds(selection.map((target) => boundsForTarget(project, target)));
+    selectionLayer.rect(bounds.x, bounds.y, bounds.width, bounds.height)
+      .stroke({ color: "#2563eb", width: 2 / Math.max(canvasScale, 0.01), alpha: 0.95 });
+    const handleSize = 8 / Math.max(canvasScale, 0.01);
+    const handles = [
+      [bounds.x, bounds.y],
+      [bounds.x + bounds.width, bounds.y],
+      [bounds.x, bounds.y + bounds.height],
+      [bounds.x + bounds.width, bounds.y + bounds.height],
+    ];
+    for (const [x, y] of handles) {
+      selectionLayer.rect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize)
+        .fill("#ffffff")
+        .stroke({ color: "#2563eb", width: 1 / Math.max(canvasScale, 0.01) });
+    }
+    const rotateY = bounds.y - 24 / Math.max(canvasScale, 0.01);
+    selectionLayer.moveTo(bounds.x + bounds.width / 2, bounds.y)
+      .lineTo(bounds.x + bounds.width / 2, rotateY)
+      .stroke({ color: "#2563eb", width: 2 / Math.max(canvasScale, 0.01) });
+    selectionLayer.circle(bounds.x + bounds.width / 2, rotateY, handleSize / 2)
+      .fill("#ffffff")
+      .stroke({ color: "#2563eb", width: 1 / Math.max(canvasScale, 0.01) });
+  }
+  if (selectionDrag?.mode === "marquee") {
+    const x = Math.min(selectionDrag.start.x, selectionDrag.bounds.x);
+    const y = Math.min(selectionDrag.start.y, selectionDrag.bounds.y);
+    const width = Math.abs(selectionDrag.bounds.x - selectionDrag.start.x);
+    const height = Math.abs(selectionDrag.bounds.y - selectionDrag.start.y);
+    selectionLayer.rect(x, y, width, height)
+      .fill({ color: "#60a5fa", alpha: 0.12 })
+      .stroke({ color: "#2563eb", width: 1 / Math.max(canvasScale, 0.01), alpha: 0.9 });
+  }
+};
 
 const redraw = (): void => {
   animatedDisplays.length = 0;
@@ -657,6 +730,7 @@ const redraw = (): void => {
     parentFor(text.layerId).addChild(textNode);
   }
   drawingLayer.addChild(previewLayer);
+  redrawSelectionOverlay();
   if (animationPlaying && !animationActive) {
     animationPlaying = false;
     const button = controls.querySelector<HTMLButtonElement>("#animation-play");
@@ -941,7 +1015,13 @@ const pointerKind = (event: PointerEvent): PointerKind =>
   event.pointerType === "pen" ? "pen" : event.pointerType === "touch" ? "touch" : "mouse";
 
 const isShapeTool = (tool: typeof activeTool): tool is ShapeKind =>
-  tool !== "pen" && tool !== "eraser" && tool !== "fill" && tool !== "pan" && tool !== "text";
+  tool !== "pen" && tool !== "eraser" && tool !== "fill" && tool !== "pan" && tool !== "text" && tool !== "select";
+
+const readActiveTool = (): typeof activeTool => {
+  const selectedTool = controls.querySelector<HTMLSelectElement>("#tool")?.value;
+  if (selectedTool) activeTool = selectedTool as typeof activeTool;
+  return activeTool;
+};
 
 const viewportPoint = (event: PointerEvent): { x: number; y: number } => {
   const rect = pixi.canvas.getBoundingClientRect();
@@ -991,7 +1071,262 @@ const zoomAt = (nextZoom: number, point: { x: number; y: number }): void => {
 const distanceBetween = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
   Math.hypot(a.x - b.x, a.y - b.y);
 
+const selectionBounds = (): SelectionBounds =>
+  unionBounds(selection.map((target) => boundsForTarget(project, target)));
+
+const snapValue = (value: number): number =>
+  gridEnabled ? Math.round(value / Math.max(gridSize, 1)) * Math.max(gridSize, 1) : value;
+
+const targetAtProjectPoint = (point: { x: number; y: number }): SelectionTarget | undefined => {
+  const targets = selectableTargets(project);
+  for (const target of targets.filter((candidate) => candidate.type !== "layer").reverse()) {
+    const bounds = boundsForTarget(project, target);
+    if (point.x >= bounds.x && point.x <= bounds.x + bounds.width &&
+        point.y >= bounds.y && point.y <= bounds.y + bounds.height) return target;
+  }
+  for (const target of targets.filter((candidate) => candidate.type === "layer").reverse()) {
+    const bounds = boundsForTarget(project, target);
+    if (point.x >= bounds.x && point.x <= bounds.x + bounds.width &&
+        point.y >= bounds.y && point.y <= bounds.y + bounds.height) return target;
+  }
+  return undefined;
+};
+
+const removeSelection = (): void => {
+  if (selection.length === 0) return;
+  history.push(cloneProject(project));
+  const selected = new Set(selection.map(targetKey));
+  const layerIds = new Set(selection.filter((target) => target.type === "layer").map((target) => target.id));
+  const inSelectedLayer = (layerId: string | undefined): boolean => {
+    let current = layerId ? project.layers.find((layer) => layer.id === layerId) : undefined;
+    while (current) {
+      if (layerIds.has(current.id)) return true;
+      current = current.parentId ? project.layers.find((layer) => layer.id === current?.parentId) : undefined;
+    }
+    return false;
+  };
+  const hadReferences = project.rasterReferences.some((item) => selected.has(`raster:${item.id}`) || inSelectedLayer(item.layerId)) ||
+    project.importedSvgs.some((item) => selected.has(`svg:${item.id}`) || inSelectedLayer(item.layerId));
+  project.strokes = project.strokes.filter((item) => !selected.has(`stroke:${item.id}`) && !inSelectedLayer(item.layerId));
+  project.shapes = project.shapes.filter((item) => !selected.has(`shape:${item.id}`) && !inSelectedLayer(item.layerId));
+  project.texts = project.texts.filter((item) => !selected.has(`text:${item.id}`) && !inSelectedLayer(item.layerId));
+  project.rasterReferences = project.rasterReferences.filter((item) => !selected.has(`raster:${item.id}`) && !inSelectedLayer(item.layerId));
+  project.importedSvgs = project.importedSvgs.filter((item) => !selected.has(`svg:${item.id}`) && !inSelectedLayer(item.layerId));
+  project.layers = project.layers.filter((item) => !selected.has(`layer:${item.id}`) && !inSelectedLayer(item.parentId ?? ""));
+  const remaining = new Set([
+    ...project.strokes.map((item) => item.id),
+    ...project.shapes.map((item) => item.id),
+    ...project.texts.map((item) => item.id),
+    ...project.layers.map((item) => item.id),
+  ]);
+  project.animations = project.animations.filter((animation) => remaining.has(animation.targetId));
+  selection = [];
+  if (hadReferences) {
+    void refreshReferenceLayer(project).catch((error: unknown) => {
+      setStatus(`Could not update references: ${error instanceof Error ? error.message : "unknown error"}`);
+    });
+  }
+  redraw();
+  setStatus("Selection deleted.");
+};
+
+const updateSelectionTransforms = (
+  transform: { translateX?: number; translateY?: number; scaleX?: number; scaleY?: number; rotation?: number },
+): void => {
+  if (selection.length === 0) return;
+  history.push(cloneProject(project));
+  applyGroupTransform(project, selection, selectionBounds(), transform);
+  redraw();
+  setStatus("Selection transformed.");
+};
+
+const groupSelection = (): void => {
+  if (selection.length === 0) return setStatus("Select an object or layer first.");
+  const baseline = cloneProject(project);
+  try {
+    history.push(baseline);
+    const group = groupProjectSelection(project, selection);
+    selection = [group];
+    redraw();
+    setStatus("Selection grouped.");
+  } catch (error: unknown) {
+    Object.assign(project, baseline);
+    history.pop();
+    setStatus(error instanceof GroupingError ? error.message : "Could not group the selection.");
+  }
+};
+
+const ungroupSelection = (): void => {
+  if (selection.length === 0) return setStatus("Select a group layer first.");
+  const baseline = cloneProject(project);
+  try {
+    history.push(baseline);
+    const promoted = ungroupProjectSelection(project, selection);
+    selection = normalizeSelection(project, promoted);
+    redraw();
+    setStatus("Selection ungrouped.");
+  } catch (error: unknown) {
+    Object.assign(project, baseline);
+    history.pop();
+    setStatus(error instanceof GroupingError ? error.message : "Could not ungroup the selection.");
+  }
+};
+
+const duplicateSelection = (
+  targets: SelectionTarget[],
+  offset = 16,
+  sourceProject: DrawingProject = project,
+): SelectionTarget[] => {
+  const normalized = normalizeSelection(sourceProject, targets);
+  const oldToNew = new Map<string, string>();
+  const nextTargets: SelectionTarget[] = [];
+  const selectedLayers = new Set(normalized.filter((target) => target.type === "layer").map((target) => target.id));
+  const originalLayers = [...sourceProject.layers];
+  const copyTransform = (transform: import("./types").ProjectTransform | undefined): import("./types").ProjectTransform => ({
+    translateX: (transform?.translateX ?? 0) + offset,
+    translateY: (transform?.translateY ?? 0) + offset,
+    rotation: transform?.rotation ?? 0,
+    scaleX: transform?.scaleX ?? 1,
+    scaleY: transform?.scaleY ?? 1,
+  });
+  const duplicateObject = <T extends { id: string; layerId?: string; transform?: import("./types").ProjectTransform }>(
+    source: T,
+    type: SelectionTargetType,
+  ): T => {
+    const clone = structuredClone(source);
+    const id = crypto.randomUUID();
+    oldToNew.set(source.id, id);
+    clone.id = id;
+    clone.transform = copyTransform(clone.transform);
+    if (clone.layerId && oldToNew.has(clone.layerId)) clone.layerId = oldToNew.get(clone.layerId);
+    nextTargets.push({ type, id });
+    return clone;
+  };
+  const copiedLayerIds = new Set(originalLayers
+    .filter((layer) => [...selectedLayers].some((root) => {
+      let current: typeof layer | undefined = layer;
+      while (current) {
+        if (current.id === root) return true;
+        current = current.parentId ? originalLayers.find((candidate) => candidate.id === current?.parentId) : undefined;
+      }
+      return false;
+    }))
+    .map((layer) => layer.id));
+  for (const source of originalLayers.filter((layer) => copiedLayerIds.has(layer.id))) {
+    const clone = structuredClone(source);
+    const id = crypto.randomUUID();
+    oldToNew.set(source.id, id);
+    clone.id = id;
+    if (selectedLayers.has(source.id)) clone.transform = copyTransform(clone.transform);
+    if (clone.parentId && oldToNew.has(clone.parentId)) clone.parentId = oldToNew.get(clone.parentId)!;
+    project.layers.push(clone);
+    if (selectedLayers.has(source.id)) nextTargets.push({ type: "layer", id });
+  }
+  const layerDescendant = (layerId: string | undefined): boolean =>
+    Boolean(layerId && [...selectedLayers].some((root) => {
+      let current = sourceProject.layers.find((layer) => layer.id === layerId);
+      while (current) {
+        if (current.id === root) return true;
+        current = current.parentId ? sourceProject.layers.find((layer) => layer.id === current?.parentId) : undefined;
+      }
+      return false;
+    }));
+  for (const source of sourceProject.strokes.filter((item) => layerDescendant(item.layerId) || normalized.some((target) => target.type === "stroke" && target.id === item.id))) {
+    project.strokes.push(duplicateObject(source, "stroke"));
+  }
+  for (const source of sourceProject.shapes.filter((item) => layerDescendant(item.layerId) || normalized.some((target) => target.type === "shape" && target.id === item.id))) {
+    project.shapes.push(duplicateObject(source, "shape"));
+  }
+  for (const source of sourceProject.texts.filter((item) => layerDescendant(item.layerId) || normalized.some((target) => target.type === "text" && target.id === item.id))) {
+    project.texts.push(duplicateObject(source, "text"));
+  }
+  for (const source of sourceProject.rasterReferences.filter((item) => layerDescendant(item.layerId) || normalized.some((target) => target.type === "raster" && target.id === item.id))) {
+    project.rasterReferences.push(duplicateObject(source, "raster"));
+  }
+  for (const source of sourceProject.importedSvgs.filter((item) => layerDescendant(item.layerId) || normalized.some((target) => target.type === "svg" && target.id === item.id))) {
+    project.importedSvgs.push(duplicateObject(source, "svg"));
+  }
+  project.animations.push(...sourceProject.animations
+    .filter((animation) => oldToNew.has(animation.targetId))
+    .map((animation) => ({ ...structuredClone(animation), id: crypto.randomUUID(), targetId: oldToNew.get(animation.targetId)! })));
+  return nextTargets;
+};
+
+const copySelection = (): void => {
+  const targets = normalizeSelection(project, selection);
+  selectionClipboard = targets.length ? { project: cloneProject(project), targets } : null;
+  setStatus(selectionClipboard ? "Selection copied." : "Nothing selected.");
+};
+
+const pasteSelection = (): void => {
+  if (!selectionClipboard) return setStatus("Clipboard is empty.");
+  history.push(cloneProject(project));
+  selection = duplicateSelection(selectionClipboard.targets, 16, selectionClipboard.project);
+  redraw();
+  setStatus("Selection pasted.");
+};
+
 window.addEventListener("keydown", (event) => {
+  const editingText = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement ||
+    event.target instanceof HTMLSelectElement;
+  if (!editingText && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+    event.preventDefault();
+    selection = selectableTargets(project).filter((target) => target.type !== "layer");
+    redraw();
+    return;
+  }
+  if (!editingText && activeTool === "select" && (event.metaKey || event.ctrlKey)) {
+    const key = event.key.toLowerCase();
+    if (key === "g" && !event.shiftKey) {
+      event.preventDefault();
+      groupSelection();
+      return;
+    }
+    if (key === "g" && event.shiftKey) {
+      event.preventDefault();
+      ungroupSelection();
+      return;
+    }
+    if (key === "c") {
+      event.preventDefault();
+      copySelection();
+      return;
+    }
+    if (key === "x") {
+      event.preventDefault();
+      copySelection();
+      removeSelection();
+      return;
+    }
+    if (key === "v") {
+      event.preventDefault();
+      pasteSelection();
+      return;
+    }
+    if (key === "d") {
+      event.preventDefault();
+      if (selection.length > 0) {
+        history.push(cloneProject(project));
+        selection = duplicateSelection(selection);
+        redraw();
+        setStatus("Selection duplicated.");
+      }
+      return;
+    }
+  }
+  if (!editingText && activeTool === "select" && (event.key === "Delete" || event.key === "Backspace")) {
+    event.preventDefault();
+    removeSelection();
+    return;
+  }
+  if (!editingText && activeTool === "select" && selection.length > 0 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    event.preventDefault();
+    const step = event.shiftKey ? Math.max(gridSize, 10) : 1;
+    const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+    const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+    updateSelectionTransforms({ translateX: dx, translateY: dy });
+    return;
+  }
   if (event.code === "Space") {
     spacePressed = true;
     event.preventDefault();
@@ -1004,9 +1339,10 @@ window.addEventListener("keyup", (event) => {
 pixi.canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   pixi.canvas.setPointerCapture(event.pointerId);
+  const tool = readActiveTool();
   const point = viewportPoint(event);
   pointers.set(event.pointerId, { ...point, type: event.pointerType });
-  if (event.button === 1 || spacePressed || (activeTool === "pan" && pointers.size < 2)) {
+  if (event.button === 1 || spacePressed || (tool === "pan" && pointers.size < 2)) {
     panPointer = { id: event.pointerId, ...point };
     return;
   }
@@ -1025,15 +1361,79 @@ pixi.canvas.addEventListener("pointerdown", (event) => {
     };
     return;
   }
-  if (activeTool === "eraser") {
+  if (tool === "select") {
+    const projectPoint = toProjectPoint(event);
+    const selectedBounds = selectionBounds();
+    const tolerance = 12 / Math.max(canvasScale, 0.01);
+    const bottomRight = { x: selectedBounds.x + selectedBounds.width, y: selectedBounds.y + selectedBounds.height };
+    const rotatePoint = { x: selectedBounds.x + selectedBounds.width / 2, y: selectedBounds.y - 24 / Math.max(canvasScale, 0.01) };
+    if (selection.length > 0 && Math.hypot(projectPoint.x - rotatePoint.x, projectPoint.y - rotatePoint.y) <= tolerance) {
+      selectionDrag = {
+        mode: "rotate",
+        start: projectPoint,
+        bounds: selectedBounds,
+        baseline: cloneProject(project),
+        changed: false,
+      };
+      return;
+    }
+    if (selection.length > 0 && Math.hypot(projectPoint.x - bottomRight.x, projectPoint.y - bottomRight.y) <= tolerance) {
+      selectionDrag = {
+        mode: "resize",
+        start: projectPoint,
+        bounds: selectedBounds,
+        baseline: cloneProject(project),
+        changed: false,
+      };
+      return;
+    }
+    const selectedTarget = selection.find((target) => {
+      const targetBounds = boundsForTarget(project, target);
+      return projectPoint.x >= targetBounds.x - tolerance && projectPoint.x <= targetBounds.x + targetBounds.width + tolerance &&
+        projectPoint.y >= targetBounds.y - tolerance && projectPoint.y <= targetBounds.y + targetBounds.height + tolerance;
+    });
+    const hit = targetAtProjectPoint(projectPoint);
+    if (selectedTarget && !event.shiftKey) {
+      selectionDrag = {
+        mode: "move",
+        start: projectPoint,
+        bounds: selectedBounds,
+        baseline: cloneProject(project),
+        changed: false,
+      };
+      return;
+    }
+    if (hit) {
+      if (event.shiftKey) {
+        selection = selection.some((target) => targetKey(target) === targetKey(hit))
+          ? selection.filter((target) => targetKey(target) !== targetKey(hit))
+          : normalizeSelection(project, [...selection, hit]);
+      } else {
+        selection = [hit];
+      }
+      redraw();
+      return;
+    }
+    selection = [];
+    selectionDrag = {
+      mode: "marquee",
+      start: projectPoint,
+      bounds: { x: projectPoint.x, y: projectPoint.y, width: 0, height: 0 },
+      baseline: cloneProject(project),
+      changed: false,
+    };
+    redraw();
+    return;
+  }
+  if (tool === "eraser") {
     eraseAt(toProjectPoint(event));
     return;
   }
-  if (activeTool === "fill") {
+  if (tool === "fill") {
     fillAt(toProjectPoint(event));
     return;
   }
-  if (activeTool === "text") {
+  if (tool === "text") {
     const point = toProjectPoint(event);
     const content = controls.querySelector<HTMLInputElement>("#text-content")?.value.trim() ?? "";
     const fontSize = Number(controls.querySelector<HTMLInputElement>("#text-size")?.value);
@@ -1085,6 +1485,44 @@ pixi.canvas.addEventListener("pointermove", (event) => {
     zoomAtProjectPoint(pinchStart.zoom * (distance / pinchStart.distance), projectPoint, midpoint);
     return;
   }
+  if (selectionDrag) {
+    const point = toProjectPoint(event);
+    if (selectionDrag.mode === "marquee") {
+      selectionDrag.bounds = {
+        x: Math.min(selectionDrag.start.x, point.x),
+        y: Math.min(selectionDrag.start.y, point.y),
+        width: Math.abs(point.x - selectionDrag.start.x),
+        height: Math.abs(point.y - selectionDrag.start.y),
+      };
+      selectionDrag.changed = selectionDrag.bounds.width > 2 || selectionDrag.bounds.height > 2;
+      redrawSelectionOverlay();
+      return;
+    }
+    Object.assign(project, cloneProject(selectionDrag.baseline));
+    const dx = snapValue(point.x - selectionDrag.start.x);
+    const dy = snapValue(point.y - selectionDrag.start.y);
+    if (selectionDrag.mode === "move") {
+      applyGroupTransform(project, selection, selectionDrag.bounds, { translateX: dx, translateY: dy });
+    } else if (selectionDrag.mode === "resize") {
+      const width = Math.max(1, selectionDrag.bounds.width + dx);
+      const height = Math.max(1, selectionDrag.bounds.height + dy);
+      applyGroupTransform(project, selection, selectionDrag.bounds, {
+        scaleX: width / Math.max(selectionDrag.bounds.width, 1),
+        scaleY: height / Math.max(selectionDrag.bounds.height, 1),
+      });
+    } else {
+      const center = {
+        x: selectionDrag.bounds.x + selectionDrag.bounds.width / 2,
+        y: selectionDrag.bounds.y + selectionDrag.bounds.height / 2,
+      };
+      const startAngle = Math.atan2(selectionDrag.start.y - center.y, selectionDrag.start.x - center.x);
+      const angle = Math.atan2(point.y - center.y, point.x - center.x) - startAngle;
+      applyGroupTransform(project, selection, selectionDrag.bounds, { rotation: angle });
+    }
+    selectionDrag.changed = Math.abs(dx) > 0 || Math.abs(dy) > 0 || selectionDrag.mode === "rotate";
+    redraw();
+    return;
+  }
   if (!activePointer || activePointer.id !== event.pointerId) return;
   const nextPoint = toProjectPoint(event);
   if (activeTool === "pen") activePoints.push(nextPoint);
@@ -1101,14 +1539,37 @@ const finishStroke = (event: PointerEvent): void => {
     return;
   }
   if (pointers.size < 2) pinchStart = null;
+  if (selectionDrag) {
+    const drag = selectionDrag;
+    selectionDrag = null;
+    if (drag.mode === "marquee") {
+      if (drag.changed) {
+        selection = normalizeSelection(project, selectableTargets(project).filter((target) =>
+          boundsIntersect(boundsForTarget(project, target), drag.bounds)));
+      }
+      redraw();
+      setStatus(selection.length ? `${selection.length} object${selection.length === 1 ? "" : "s"} selected.` : "Selection cleared.");
+      return;
+    }
+    if (drag.changed) {
+      history.push(drag.baseline);
+      redraw();
+      setStatus("Selection transformed.");
+    } else {
+      Object.assign(project, drag.baseline);
+      redraw();
+    }
+    return;
+  }
   if (!activePointer || activePointer.id !== event.pointerId) return;
+  const tool = readActiveTool();
   const endedAt = performance.now();
   history.push(cloneProject(project));
-  if (activeTool === "pen") {
+  if (tool === "pen") {
     const next = appendStroke(project, activePoints, currentStyle, activePointer.type, activePointer.startedAt, endedAt);
     Object.assign(project, next);
-  } else if (activePoints.length > 1 && isShapeTool(activeTool)) {
-    const next = appendShape(project, shapeFromPointList(activeTool, activePoints));
+  } else if (activePoints.length > 1 && isShapeTool(tool)) {
+    const next = appendShape(project, shapeFromPointList(tool, activePoints));
     Object.assign(project, next);
   }
   activePointer = null;
@@ -1123,6 +1584,62 @@ pixi.canvas.addEventListener("wheel", (event) => {
   const point = { x: event.offsetX, y: event.offsetY };
   zoomAt(zoom * (event.deltaY < 0 ? 1.1 : 0.9), point);
 }, { passive: false });
+
+const selectionMenu = document.createElement("div");
+selectionMenu.className = "selection-menu";
+selectionMenu.hidden = true;
+selectionMenu.innerHTML = `
+  <button type="button" data-action="copy">Copy</button>
+  <button type="button" data-action="cut">Cut</button>
+  <button type="button" data-action="paste">Paste</button>
+  <button type="button" data-action="duplicate">Duplicate</button>
+  <button type="button" data-action="delete">Delete</button>
+  <button type="button" data-action="group">Group</button>
+  <button type="button" data-action="ungroup">Ungroup</button>
+  <button type="button" data-action="flip-x">Flip horizontal</button>
+  <button type="button" data-action="flip-y">Flip vertical</button>
+`;
+document.body.append(selectionMenu);
+const closeSelectionMenu = (): void => {
+  selectionMenu.hidden = true;
+};
+pixi.canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  const point = toProjectPoint(event);
+  const hit = targetAtProjectPoint(point);
+  if (hit && !selection.some((target) => targetKey(target) === targetKey(hit))) {
+    selection = [hit];
+    redraw();
+  }
+  selectionMenu.style.left = `${Math.min(event.clientX, window.innerWidth - 180)}px`;
+  selectionMenu.style.top = `${Math.min(event.clientY, window.innerHeight - 260)}px`;
+  selectionMenu.hidden = false;
+});
+selectionMenu.addEventListener("click", (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+  if (!button) return;
+  const action = button.dataset.action;
+  closeSelectionMenu();
+  if (action === "copy") copySelection();
+  else if (action === "cut") {
+    copySelection();
+    removeSelection();
+  } else if (action === "paste") pasteSelection();
+  else if (action === "duplicate") {
+    if (selection.length === 0) return setStatus("Select an object first.");
+    history.push(cloneProject(project));
+    selection = duplicateSelection(selection);
+    redraw();
+    setStatus("Selection duplicated.");
+  } else if (action === "delete") removeSelection();
+  else if (action === "group") groupSelection();
+  else if (action === "ungroup") ungroupSelection();
+  else if (action === "flip-x") updateSelectionTransforms({ scaleX: -1 });
+  else if (action === "flip-y") updateSelectionTransforms({ scaleY: -1 });
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!selectionMenu.hidden && event.target instanceof Node && !selectionMenu.contains(event.target)) closeSelectionMenu();
+});
 
 const setStatus = (message: string): void => {
   const status = document.querySelector<HTMLParagraphElement>("#status");
@@ -1431,6 +1948,21 @@ document.querySelector<HTMLButtonElement>("#clear")?.addEventListener("click", (
   redraw();
   setStatus("Canvas cleared.");
 });
+document.querySelector<HTMLButtonElement>("#selection-delete")?.addEventListener("click", removeSelection);
+document.querySelector<HTMLButtonElement>("#selection-flip-x")?.addEventListener("click", () => {
+  if (selection.length === 0) return setStatus("Select an object first.");
+  updateSelectionTransforms({ scaleX: -1 });
+});
+document.querySelector<HTMLButtonElement>("#selection-flip-y")?.addEventListener("click", () => {
+  if (selection.length === 0) return setStatus("Select an object first.");
+  updateSelectionTransforms({ scaleY: -1 });
+});
+document.querySelector<HTMLButtonElement>("#selection-rotate")?.addEventListener("click", () => {
+  if (selection.length === 0) return setStatus("Select an object first.");
+  updateSelectionTransforms({ rotation: Math.PI / 2 });
+});
+document.querySelector<HTMLButtonElement>("#selection-group")?.addEventListener("click", groupSelection);
+document.querySelector<HTMLButtonElement>("#selection-ungroup")?.addEventListener("click", ungroupSelection);
 document.querySelector<HTMLButtonElement>("#grid-toggle")?.addEventListener("click", (event) => {
   gridEnabled = !gridEnabled;
   const button = event.currentTarget as HTMLButtonElement;

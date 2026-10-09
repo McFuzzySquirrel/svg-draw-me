@@ -12,6 +12,11 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 ### Added
 
+- Select tool for artwork, text, references, and named layers, including
+  marquee selection, transforms, flips, deletion, duplication, internal
+  copy/cut/paste, grouping/ungrouping, grid snapping, keyboard movement, and a
+  context menu. Groups reuse named layers and preserve supported transforms;
+  animated groups must be unanimated before ungrouping.
 - Dedicated top-level Undo icon for quick history access.
 - Contextual Draw menu groups that show text, shape, and bucket settings only
   for the tools that use them.

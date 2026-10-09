@@ -34,6 +34,7 @@ The application currently runs entirely in the browser. Projects are held in mem
 | Category command menu | Groups drawing, canvas, files, animation, layers, and path commands behind compact accessible icons and anchored popups to maximize drawing space. |
 | Bounded workspace | Clips drawing and reference layers to an editable project canvas; importing a larger reference expands the canvas to contain it. |
 | Whole-object eraser | Removes a complete touched stroke, shape, or reference layer and supports undo. |
+| Object selection and editing | Selects artwork, text, references, and layers with clicks or marquee selection; supports move, resize, rotate, flip, delete, duplicate, internal copy/paste, grouping/ungrouping, grid snapping, keyboard movement, and a context menu. |
 | Pointer input | Supports mouse, touch, and pen/stylus pointer events. |
 | Responsive workspace | Fits the current project coordinate space and centers it with letterboxing. |
 | Zoom and navigation | Provides 25%–800% zoom, reset controls, pointer-centered wheel zoom, two-finger pinch-and-pan, a touch-friendly Pan tool, and Space/middle-mouse panning. |
@@ -88,6 +89,8 @@ The viewport transform handles fit-to-canvas scaling, zoom, pan, and pointer coo
 - `src/imports.ts` — SVG Blob construction helper.
 - `src/svg.ts` — standard and editable SVG generation.
 - `src/transforms.ts` — shared project transform application for PixiJS and SVG.
+- `src/selection.ts` — project-space selection targets, bounds, marquee tests, and group transform helpers.
+- `src/grouping.ts` — hierarchy mutations and world-transform-preserving Group/Ungroup operations.
 - `src/animation.ts` — pure preset animation evaluation and timing behavior.
 - `src/styles.css` — responsive application styling.
 - `tests/` — document, coordinate, and import unit tests.

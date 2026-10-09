@@ -12,10 +12,14 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 ### Added
 
+- Dedicated top-level Undo icon for quick history access.
+- Contextual Draw menu groups that show text, shape, and bucket settings only
+  for the tools that use them.
+- Category command menu with compact accessible icons, anchored popups, and
+  keyboard/outside-click dismissal behavior.
 - First-class line, rectangle, ellipse, polygon, and curved-line tools.
 - Optional shape fills.
 - Fill bucket for tolerant closed freehand loops.
-- Collapsible mobile toolbar menu.
 - Whole-object eraser with undo support.
 - Editable canvas dimensions and grid spacing; imported references automatically expand the canvas to fit.
 - Eraser support for imported reference images and SVGs, with undo.
@@ -33,6 +37,9 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 ### Fixed
 
+- Restored all toolbar commands in the category menu, including both reference
+  imports, project open/save, exports, and labeled command subgroups.
+- Kept command popups hidden on first load until their category is selected.
 - Kept artwork and the grid visible above imported reference images.
 - Restored visible drawing while keeping artwork clipped to the project canvas.
 

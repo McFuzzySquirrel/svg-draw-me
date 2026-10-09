@@ -38,9 +38,13 @@ The viewport now keeps document coordinates stable while providing 25%–800% zo
 
 The Vite app now uses relative asset paths and includes a GitHub Actions workflow that runs tests, builds the production bundle, uploads `dist/`, and deploys it to GitHub Pages on pushes to `main` or manual workflow dispatch.
 
-## Follow-up feature — Mobile menu and freehand fill bucket (complete)
+## Follow-up feature — Command menu and freehand fill bucket (complete)
 
-The toolbar can now collapse on narrow screens through an accessible Menu/Hide menu toggle. A Fill bucket tool fills tolerant closed freehand loops while preserving the original stroke points and metadata; filled loops render, export, and undo as editable stroke objects.
+The toolbar now groups commands behind compact accessible category icons with
+anchored popups, one-open-at-a-time behavior, outside-click and Escape
+dismissal, and focus return. A Fill bucket tool fills tolerant closed freehand
+loops while preserving the original stroke points and metadata; filled loops
+render, export, and undo as editable stroke objects.
 
 ## Follow-up feature — Eraser and first-class shape tools (complete)
 
@@ -53,6 +57,41 @@ Drawing input is clamped to the project dimensions, while the viewport mask and 
 ## Follow-up feature — Resizable canvas, adjustable grid, and reference eraser (complete)
 
 Canvas width and height and grid spacing are editable from the toolbar. Importing a raster image or SVG expands the canvas to include the reference bounds. The eraser removes whole raster/SVG reference layers as well as strokes and shapes, and undo restores erased references from both new and loaded projects.
+
+## Follow-up feature — Category command menu (complete)
+
+Drawing, canvas, file, animation, layer, and path commands are organized behind
+compact icons to maximize drawing space. Popups remain anchored to their
+category buttons, close when another category opens or when the user clicks
+outside/presses Escape, and use keyboard focus and ARIA state consistently at
+all viewport widths.
+
+## Follow-up fix — Initial command popup visibility (complete)
+
+Command popups now explicitly honor their hidden state so the first load shows
+only the category icons. Popups remain open while controls are edited and close
+through the category toggle, another category, outside click, or Escape.
+
+## Follow-up fix — Complete command inventory (complete)
+
+The category migration now moves every matching control rather than only the
+first selector match. All original file actions and advanced controls remain
+available, and Draw, Canvas, and Files popups expose labeled subgroups for
+brush/tools, text, fill/effects, dimensions, grid, history/zoom, references,
+project files, and exports.
+
+## Follow-up feature — Contextual Draw controls (complete)
+
+The Draw popup keeps color, width, and tool selection visible while hiding
+unrelated settings. Text controls appear only for Text, shape fill/gradient/
+blur controls only for Rectangle, Ellipse, Polygon, and Curved line, and
+bucket controls only for Fill bucket.
+
+## Follow-up feature — Dedicated Undo command (complete)
+
+Undo is now promoted from Canvas > History and zoom to a standalone command-bar
+icon. It reuses the existing action and accessibility metadata, while Clear
+and zoom remain in Canvas.
 
 ## Follow-up feature — Advanced SVG model foundation and animation preview (in progress)
 

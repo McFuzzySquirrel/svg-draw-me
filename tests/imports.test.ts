@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSvgBlob, getSvgDimensions } from "../src/imports";
+import { createSvgBlob, findUnsupportedSvgFeatures, getSvgDimensions } from "../src/imports";
 
 describe("SVG imports", () => {
   it("creates an SVG-typed blob for browser loading", () => {
@@ -12,5 +12,11 @@ describe("SVG imports", () => {
     expect(getSvgDimensions('<svg width="640px" height="480"></svg>')).toEqual({ x: 0, y: 0, width: 640, height: 480 });
     expect(getSvgDimensions('<svg viewBox="-10 5 320 240"></svg>')).toEqual({ x: -10, y: 5, width: 320, height: 240 });
     expect(getSvgDimensions("<svg></svg>")).toEqual({ x: 0, y: 0, width: 300, height: 150 });
+  });
+
+  it("reports SVG features outside the supported preview subset", () => {
+    expect(findUnsupportedSvgFeatures('<svg><filter id="blur"></filter><image href="https://example.test/a.png"/></svg>'))
+      .toEqual(["filters", "external assets"]);
+    expect(findUnsupportedSvgFeatures("<svg><circle cx=\"2\" cy=\"2\" r=\"1\" /></svg>")).toEqual([]);
   });
 });

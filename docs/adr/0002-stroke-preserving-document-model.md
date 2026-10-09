@@ -27,6 +27,13 @@ The product must export game or standard SVG assets without losing how the image
 
 Chosen option: “Store a versioned project model containing ordered strokes, first-class shapes, and reference layers”, because it preserves the drawing process while still allowing standard SVG geometry to be generated.
 
+The model's version 2 adds named layer/group metadata, optional project-space
+transforms, and validated animation definitions while retaining version 1 as a
+migration input. This schema foundation does not itself provide animation
+playback or layer editing controls. Object and ancestor-layer transforms are
+applied consistently in PixiJS previews and SVG serialization; translations use
+project units, rotations use radians, and scales use x/y factors.
+
 ### Positive Consequences
 
 - Individual strokes and shapes remain available for future editing and analysis.

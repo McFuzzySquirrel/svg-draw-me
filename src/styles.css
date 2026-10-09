@@ -21,6 +21,27 @@ button, input { font: inherit; }
 .controls input[type="number"] { width: 6.5rem; }
 .control-group { display: inline-flex; align-items: center; gap: 0.65rem; padding: 0.25rem 0.5rem; border: 1px solid #40516d; border-radius: 0.45rem; }
 .control-group label { white-space: nowrap; }
+.animation-panel {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+  padding: 0.25rem 0.5rem; border: 1px solid #40516d; border-radius: 0.45rem;
+}
+.layers-panel {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+  padding: 0.25rem 0.5rem; border: 1px solid #40516d; border-radius: 0.45rem;
+}
+.path-editor-panel {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+  padding: 0.25rem 0.5rem; border: 1px solid #40516d; border-radius: 0.45rem;
+}
+.animation-panel summary { cursor: pointer; font-size: 0.85rem; }
+.layers-panel summary { cursor: pointer; font-size: 0.85rem; }
+.path-editor-panel summary { cursor: pointer; font-size: 0.85rem; }
+.animation-panel[open] summary { margin-right: 0.2rem; }
+.layers-panel[open] summary { margin-right: 0.2rem; }
+.path-editor-panel[open] summary { margin-right: 0.2rem; }
+.animation-panel input[type="number"] { width: 5rem; }
+.layers-panel input[type="number"] { width: 5rem; }
+.path-editor-panel input[type="number"] { width: 4.5rem; }
 .zoom-controls { display: inline-flex; align-items: center; gap: 0.3rem; }
 .zoom-controls output { min-width: 3.5rem; text-align: center; color: #c6d1e4; }
 button, .file-button {

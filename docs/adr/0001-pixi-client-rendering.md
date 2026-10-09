@@ -30,8 +30,11 @@ Chosen option: “PixiJS client-side rendering”, because it provides an intera
 ### Positive Consequences
 
 - A single viewport transform can move drawing and reference layers together.
+- Object and layer transforms can be applied through PixiJS scene-graph nodes.
 - Pointer, touch, and pen events can be handled without a backend.
 - The renderer can evolve toward game-asset previews.
+- Project-space object and layer transforms compose independently of the
+  viewport's fit, zoom, and pan transforms.
 
 ### Negative Consequences
 

@@ -42,6 +42,12 @@ The application currently runs entirely in the browser. Projects are held in mem
 | SVG references | Imports SVG files through PixiJS vector parsing while preserving original markup in the project model. |
 | Standard SVG export | Downloads visible artwork as a normal SVG document. |
 | Editable SVG export | Downloads SVG geometry plus project metadata for stroke-preserving workflows. |
+| Preset animation preview | Stores validated object/layer animations and previews fade, move, scale, rotate, draw, pulse, and emphasis presets with playback controls. |
+| Layer editing | Adds, renames, reorders, hides, shows, and changes opacity for named layers. |
+| Text objects | Adds editable text objects with font size, family, color, alignment, transforms, and SVG export. |
+| Gradients | Applies two-color linear or radial fills to new filled shapes and preserves them in SVG export. |
+| Constrained effects | Applies bounded blur effects to new filled shapes and preserves them in SVG export. |
+| SVG path editing | Edits authored and imported M/L/Q/C/Z paths with an accessible numeric node panel; unsupported commands remain read-only. |
 | Project save and reopen | Saves the complete editable project, including reference layers, as a local `.svgdraw` file. |
 | Undo and clear | Removes the last completed stroke or clears user strokes. |
 
@@ -71,16 +77,18 @@ flowchart TD
     SVG --> Downloads[Downloaded SVG files]
 ```
 
-The viewport transform handles fit-to-canvas scaling, zoom, pan, and pointer coordinate conversion. It does not modify stored project coordinates. See [ADR-0001](docs/adr/0001-pixi-client-rendering.md), [ADR-0002](docs/adr/0002-stroke-preserving-document-model.md), and [ADR-0003](docs/adr/0003-vector-svg-reference-preview.md).
+The viewport transform handles fit-to-canvas scaling, zoom, pan, and pointer coordinate conversion without modifying stored coordinates. Separate project-space transforms on objects and named layers apply consistently to PixiJS previews and SVG output. See [ADR-0001](docs/adr/0001-pixi-client-rendering.md), [ADR-0002](docs/adr/0002-stroke-preserving-document-model.md), and [ADR-0003](docs/adr/0003-vector-svg-reference-preview.md).
 
 ## Project Structure
 
 - `src/main.ts` — application shell, controls, PixiJS setup, input handling, imports, and downloads.
-- `src/types.ts` — versioned project, stroke, point, style, and reference types.
+- `src/types.ts` — versioned project, stroke, layer, transform, animation, and reference types.
 - `src/document.ts` — project creation, cloning, serialization, deserialization, and stroke appending.
 - `src/coordinates.ts` — viewport/project coordinate and zoom transform helpers.
 - `src/imports.ts` — SVG Blob construction helper.
 - `src/svg.ts` — standard and editable SVG generation.
+- `src/transforms.ts` — shared project transform application for PixiJS and SVG.
+- `src/animation.ts` — pure preset animation evaluation and timing behavior.
 - `src/styles.css` — responsive application styling.
 - `tests/` — document, coordinate, and import unit tests.
 - `IMPLEMENTATION_PLAN.md` — implementation phases and completed follow-up fixes.
@@ -151,7 +159,9 @@ should:
 
 The following are planned or known gaps, not shipped features:
 
-- Layer management for visibility, opacity, positioning, and deletion.
+- Richer layer grouping and positioning controls.
+- Object-layer assignment and richer animation target management.
+- Elliptical arcs and other SVG path commands beyond the supported M/L/Q/C/Z subset.
 - More advanced stroke smoothing and pressure-based width rendering.
 - Browser-level interaction tests.
 - More complete handling or fallback behavior for SVG filters, masks, CSS, and external assets.

@@ -39,6 +39,15 @@ Chosen option: “Parse imported SVGs into PixiJS graphics contexts”, because 
 - Parser failures must be surfaced to users.
 - DOM-level SVG fidelity is not guaranteed.
 
+### Editable path extraction
+
+The editor extracts paths containing only `M`, `L`, `Q`, `C`, and `Z` commands
+when they have no ancestor or local transform. Extracted paths preserve
+explicit or inherited fill, stroke, width, and opacity values and are removed
+from the retained reference markup so they are rendered once. Paths using
+unsupported commands or transforms remain in the reference as read-only
+content, and the import status reports that fallback.
+
 ## Pros and Cons of the Options
 
 ### Rasterized texture preview

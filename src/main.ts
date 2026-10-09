@@ -87,7 +87,6 @@ const toolbarControls = controls.querySelector<HTMLSpanElement>("#drawing-contro
 const setMenuOpen = (open: boolean): void => {
   controls.classList.toggle("menu-collapsed", !open);
   menuToggle?.setAttribute("aria-expanded", String(open));
-  if (menuToggle) menuToggle.textContent = open ? "Hide menu" : "Menu";
   menuToggle?.setAttribute("aria-label", open ? "Hide menu" : "Show menu");
   menuToggle?.setAttribute("title", open ? "Hide menu" : "Show menu");
   toolbarControls?.setAttribute("aria-hidden", String(!open));
@@ -637,32 +636,37 @@ syncScale();
 
 async function createReferenceLayer(source: DrawingProject): Promise<Container> {
   const layer = new Container();
-  for (const reference of source.rasterReferences) {
-    const texture = await Assets.load({ src: reference.dataUrl, parser: "texture" });
-    const sprite = new Sprite(texture);
-    sprite.position.set(reference.x, reference.y);
-    sprite.width = reference.width;
-    sprite.height = reference.height;
-    sprite.alpha = reference.opacity;
-    sprite.visible = reference.visible;
-    layer.addChild(sprite);
-  }
-  for (const reference of source.importedSvgs) {
-    const url = URL.createObjectURL(createSvgBlob(reference.markup));
-    try {
-      const context = await Assets.load({
-        src: url,
-        parser: "svg",
-        data: { parseAsGraphicsContext: true },
-      });
-      const imported = new Graphics(context);
-      imported.position.set(reference.x, reference.y);
-      imported.alpha = reference.opacity * 0.8;
-      imported.visible = reference.visible;
-      layer.addChild(imported);
-    } finally {
-      URL.revokeObjectURL(url);
+  try {
+    for (const reference of source.rasterReferences) {
+      const texture = await Assets.load({ src: reference.dataUrl, parser: "texture" });
+      const sprite = new Sprite(texture);
+      sprite.position.set(reference.x, reference.y);
+      sprite.width = reference.width;
+      sprite.height = reference.height;
+      sprite.alpha = reference.opacity;
+      sprite.visible = reference.visible;
+      layer.addChild(sprite);
     }
+    for (const reference of source.importedSvgs) {
+      const url = URL.createObjectURL(createSvgBlob(reference.markup));
+      try {
+        const context = await Assets.load({
+          src: url,
+          parser: "svg",
+          data: { parseAsGraphicsContext: true },
+        });
+        const imported = new Graphics(context);
+        imported.position.set(reference.x, reference.y);
+        imported.alpha = reference.opacity * 0.8;
+        imported.visible = reference.visible;
+        layer.addChild(imported);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+  } catch (error) {
+    layer.destroy({ children: true });
+    throw error;
   }
   return layer;
 }

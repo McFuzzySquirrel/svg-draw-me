@@ -32,14 +32,17 @@ The application currently runs entirely in the browser. Projects are held in mem
 | Shape tools | Creates first-class lines, rectangles, ellipses, polygons, and curved lines with optional fills. |
 | Fill bucket | Fills or clears tolerant closed hand-drawn loops and existing fillable shapes without flattening their geometry or stroke history. |
 | Mobile menu | Collapses the toolbar to maximize drawing space on narrow screens. |
+| Bounded workspace | Clips drawing and reference layers to the project canvas; new drawing points stay within its edges. |
 | Whole-object eraser | Removes a complete touched stroke or shape and supports undo. |
 | Pointer input | Supports mouse, touch, and pen/stylus pointer events. |
 | Responsive workspace | Keeps a 1200×800 project coordinate space centered with letterboxing. |
-| Zoom and navigation | Provides 25%–800% zoom, reset controls, pointer-centered wheel zoom, two-finger pinch zoom, and Space/middle-mouse panning. |
+| Zoom and navigation | Provides 25%–800% zoom, reset controls, pointer-centered wheel zoom, two-finger pinch-and-pan, a touch-friendly Pan tool, and Space/middle-mouse panning. |
+| Grid overlay | Toggles a project-space grid to help align game-art details. |
 | Raster tracing references | Imports PNG/JPG files as translucent reference layers. |
 | SVG references | Imports SVG files through PixiJS vector parsing while preserving original markup in the project model. |
 | Standard SVG export | Downloads visible artwork as a normal SVG document. |
 | Editable SVG export | Downloads SVG geometry plus project metadata for stroke-preserving workflows. |
+| Project save and reopen | Saves the complete editable project, including reference layers, as a local `.svgdraw` file. |
 | Undo and clear | Removes the last completed stroke or clears user strokes. |
 
 ## Tech Stack
@@ -147,7 +150,6 @@ should:
 
 The following are planned or known gaps, not shipped features:
 
-- Save and reopen a standalone project file.
 - Layer management for visibility, opacity, positioning, and deletion.
 - More advanced stroke smoothing and pressure-based width rendering.
 - Browser-level interaction tests.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appendShape, appendStroke, applyFill, createProject, deserializeProject, dimensionsForBounds, serializeProject } from "../src/document";
-import { projectToEditableSvg, projectToSvg } from "../src/svg";
+import { MAX_EDITABLE_METADATA_LENGTH, projectToEditableSvg, projectToSvg } from "../src/svg";
 
 describe("stroke-preserving document", () => {
   it("expands project dimensions to include reference bounds", () => {
@@ -80,8 +80,25 @@ describe("stroke-preserving document", () => {
       8,
     );
     const svg = projectToEditableSvg(project);
+    expect(svg).toContain('"project":{"version":2');
     expect(svg).toContain('"pointerType":"touch"');
     expect(svg).toContain('stroke-linecap="square"');
+  });
+
+  it("rejects oversized editable SVG metadata", () => {
+    const project = createProject();
+    project.importedSvgs.push({
+      id: "svg-1",
+      name: "large",
+      markup: "x".repeat(MAX_EDITABLE_METADATA_LENGTH),
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      opacity: 1,
+      visible: true,
+    });
+    expect(() => projectToEditableSvg(project)).toThrow("metadata exceeds");
   });
 
   it("rejects unsupported project versions", () => {
@@ -99,6 +116,7 @@ describe("stroke-preserving document", () => {
       shapes: [],
       rasterReferences: [],
       importedSvgs: [],
+      texts: [],
       layers: [],
       animations: [],
     });
@@ -157,7 +175,84 @@ describe("stroke-preserving document", () => {
       endedAt: 1,
       geometry: { cx: 20, cy: 25, rx: 10, ry: 5 },
     });
+
     expect(projectToSvg(project)).toContain('<ellipse cx="20" cy="25" rx="10" ry="5"');
+  });
+
+  it("round trips and exports linear gradient shape fills", () => {
+    const project = appendShape(createProject(), {
+      kind: "rectangle",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: null,
+        gradient: { type: "linear", startColor: "#ff0000", endColor: "#0000ff", angle: 0 },
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { x: 0, y: 0, width: 20, height: 20 },
+    });
+
+    expect(deserializeProject(serializeProject(project))).toEqual(project);
+    const svg = projectToSvg(project);
+    expect(svg).toContain("<linearGradient");
+    expect(svg).toContain(`fill="url(#gradient-${project.shapes[0]!.id})"`);
+  });
+
+  it("round trips and exports radial gradient shape fills", () => {
+    const project = appendShape(createProject(), {
+      kind: "ellipse",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: null,
+        gradient: { type: "radial", startColor: "#ffffff", endColor: "#000000" },
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { cx: 10, cy: 10, rx: 10, ry: 10 },
+    });
+
+    expect(deserializeProject(serializeProject(project))).toEqual(project);
+    expect(projectToSvg(project)).toContain("<radialGradient");
+  });
+
+  it("round trips and exports constrained blur effects", () => {
+    const project = appendShape(createProject(), {
+      kind: "ellipse",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: "#eeeeee",
+        effect: { type: "blur", strength: 3 },
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: { cx: 10, cy: 10, rx: 5, ry: 5 },
+    });
+    expect(deserializeProject(serializeProject(project))).toEqual(project);
+    const svg = projectToSvg(project);
+    expect(svg).toContain("<feGaussianBlur stdDeviation=\"3\"");
+    expect(svg).toContain(`filter="url(#effect-${project.shapes[0]!.id})"`);
+  });
+
+  it("round trips and exports text objects", () => {
+    const project = createProject();
+    project.texts.push({
+      id: "text-1",
+      text: "<Hello>",
+      x: 10,
+      y: 20,
+      fontFamily: "Inter",
+      fontSize: 24,
+      color: "#123456",
+      opacity: 0.8,
+      align: "center",
+    });
+    expect(deserializeProject(serializeProject(project))).toEqual(project);
+    expect(projectToSvg(project)).toContain(
+      '<text x="10" y="20" font-family="Inter, sans-serif" font-size="24" fill="#123456" opacity="0.8" text-anchor="middle">&lt;Hello&gt;</text>',
+    );
   });
 
   it("sets and clears fills on strokes and shapes", () => {

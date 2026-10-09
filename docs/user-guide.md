@@ -36,6 +36,23 @@ Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Poly
 
 Shapes remain first-class objects in the editable project model and export as SVG line, rectangle, ellipse, polygon, or quadratic-path elements.
 
+For filled rectangles, ellipses, and polygons, enable **Gradient**, choose
+linear or radial mode, and choose a gradient end color before drawing. The
+gradient is retained in the project model, rendered in PixiJS, and exported
+through SVG gradient definitions.
+
+Text uses the requested font family with a generic `sans-serif` fallback when
+the family is unavailable in the browser or SVG consumer. Text-to-path
+conversion is not performed, so exact glyph outlines depend on installed fonts.
+
+Enable **Blur effect** for a constrained blur filter on new non-line shapes.
+Use **Edit paths** to select and update the coordinates of recorded curved
+paths without editing project JSON directly.
+
+Choose **Text**, enter the content and size, then click the canvas to place a
+text object. Text remains editable project data and exports as an SVG
+`text` element with its font, color, alignment, and transform metadata.
+
 Set **Canvas width** and **Canvas height** in the toolbar to resize the project. New strokes and shapes stay inside the canvas, and visible artwork and references are clipped to its edges. Importing a reference larger than the current canvas expands the canvas to show the full reference.
 
 ### Fill and clear objects
@@ -78,7 +95,9 @@ The reference is kept separately from user strokes. It is not automatically vect
 2. Select an SVG file.
 3. The SVG appears as a crisp vector reference layer. If it is larger than the canvas, the canvas expands to contain it.
 
-The original SVG markup is retained in the project model for export. Complex filters, masks, CSS, or external assets may not preview identically.
+The original SVG markup is retained in the project model for export. Filters, masks, CSS, SVG animation, and external assets are reported as
+unsupported preview features and may not render identically. Original markup
+is retained in the project for editable export.
 
 ### Undo and clear
 
@@ -97,6 +116,23 @@ The original SVG markup is retained in the project model for export. Complex fil
 - Choose **Open project** and select a previously saved `.svgdraw` file to restore the project and continue editing.
 - Project files are local JSON data; save a new copy after making further changes. Loading a project restores its canvas dimensions and references, replaces the current canvas, and clears its undo history.
 
+### Preview animations
+
+Open the **Animation** panel to select a stroke, shape, or named layer and add
+a predefined fade, move, scale, rotate, draw, pulse, or emphasis animation.
+Set its duration, delay, iteration count, direction, and easing, then use
+**Play**, **Pause**, or **Reset** to preview it. Animation state is evaluated
+transiently and does not rewrite the saved geometry. The **Reduce motion**
+toggle is enabled automatically when the browser requests
+`prefers-reduced-motion`; it can also be changed manually.
+
+Animation definitions are preserved in saved projects and editable SVG
+metadata. **Download SVG** remains a static export.
+
+The **Layers** panel can add, rename, reorder, hide, show, and change the
+opacity of named layers. Deleting a layer moves its objects to the root and
+removes animations targeting that layer.
+
 ## Offline and Reconnect Behavior
 
 There is no network-backed account or synchronization. Once the application assets are loaded, drawing and local file processing occur in the browser. Save a `.svgdraw` project before refreshing or closing the page to continue editing later.
@@ -104,6 +140,15 @@ There is no network-backed account or synchronization. Once the application asse
 ## Statuses and Notifications
 
 The status line reports completed strokes, successful imports, downloads, invalid SVG input, and loading errors. Import failures include the browser/PixiJS error message when available.
+
+### Browser smoke checklist
+
+Before a release, verify in a supported browser that mouse and touch drawing
+create separate strokes, the Pan tool responds to pinch or wheel navigation,
+animation controls play and reset targets, local SVG/raster imports appear in
+the reference list, and standard/editable downloads open successfully. Also
+check that keyboard focus reaches the toolbar and animation controls, and
+that reduced-motion preferences disable playback motion.
 
 ## Attachments or Other Data
 

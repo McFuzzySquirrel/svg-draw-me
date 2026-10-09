@@ -2,6 +2,17 @@ export function createSvgBlob(markup: string): Blob {
   return new Blob([markup], { type: "image/svg+xml" });
 }
 
+export function findUnsupportedSvgFeatures(markup: string): string[] {
+  const features: Array<[RegExp, string]> = [
+    [/<(?:filter|fe[a-z]+)\b/i, "filters"],
+    [/<mask\b/i, "masks"],
+    [/<style\b|style\s*=/i, "CSS styles"],
+    [/<(?:animate|animateTransform|set)\b/i, "SVG animation"],
+    [/(?:href|xlink:href)\s*=\s*["'](?!#|data:)/i, "external assets"],
+  ];
+  return features.filter(([pattern]) => pattern.test(markup)).map(([, name]) => name);
+}
+
 export function getSvgDimensions(markup: string): { x: number; y: number; width: number; height: number } {
   const attributes = markup.match(/<svg\b([^>]*)>/i)?.[1] ?? "";
   const attribute = (name: string): string | undefined =>

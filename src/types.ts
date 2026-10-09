@@ -36,6 +36,17 @@ export type FillTarget =
 export interface ShapeStyle {
   stroke: StrokeStyle;
   fill: string | null;
+  gradient?: GradientPaint;
+  effect?: ShapeEffect;
+}
+
+export type GradientPaint =
+  | { type: "linear"; startColor: string; endColor: string; angle: number }
+  | { type: "radial"; startColor: string; endColor: string };
+
+export interface ShapeEffect {
+  type: "blur";
+  strength: number;
 }
 
 interface ShapeBase {
@@ -89,6 +100,20 @@ export interface ImportedSvg {
   visible: boolean;
 }
 
+export interface TextObject {
+  id: string;
+  layerId?: string;
+  transform?: ProjectTransform;
+  text: string;
+  x: number;
+  y: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  opacity: number;
+  align: "left" | "center" | "right";
+}
+
 export interface ProjectTransform {
   translateX: number;
   translateY: number;
@@ -132,6 +157,7 @@ export interface DrawingProject {
   shapes: Shape[];
   rasterReferences: RasterReference[];
   importedSvgs: ImportedSvg[];
+  texts: TextObject[];
   layers: ProjectLayer[];
   animations: AnimationDefinition[];
 }

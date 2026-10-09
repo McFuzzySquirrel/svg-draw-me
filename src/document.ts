@@ -26,6 +26,7 @@ export function createProject(
     shapes: [],
     rasterReferences: [],
     importedSvgs: [],
+    texts: [],
     layers: [],
     animations: [],
   };
@@ -69,6 +70,7 @@ export function deserializeProject(serialized: string): DrawingProject {
     shapes: optionalArray(parsed.shapes, "shapes").map(validateShape),
     rasterReferences: optionalArray(parsed.rasterReferences, "rasterReferences").map(validateRasterReference),
     importedSvgs: optionalArray(parsed.importedSvgs, "importedSvgs").map(validateImportedSvg),
+    texts: optionalArray(parsed.texts, "texts").map(validateTextObject),
     layers: optionalArray(parsed.layers, "layers").map(validateLayer),
     animations: optionalArray(parsed.animations, "animations").map(validateAnimation),
   };
@@ -197,7 +199,14 @@ function validateShape(value: unknown): Shape {
       !(value.style.fill === null || isColor(value.style.fill))) {
     throw new Error("Invalid project shape.");
   }
-  const style = { stroke: validateStrokeStyle(value.style.stroke), fill: value.style.fill };
+  const gradient = value.style.gradient === undefined ? undefined : validateGradientPaint(value.style.gradient);
+  const effect = value.style.effect === undefined ? undefined : validateShapeEffect(value.style.effect);
+  const style = {
+    stroke: validateStrokeStyle(value.style.stroke),
+    fill: value.style.fill,
+    ...(gradient === undefined ? {} : { gradient }),
+    ...(effect === undefined ? {} : { effect }),
+  };
   const base = {
     id: value.id,
     ...optionalObjectTransform(value),
@@ -210,8 +219,30 @@ function validateShape(value: unknown): Shape {
   if (value.kind === "line" && hasFiniteNumbers(geometry, ["x1", "y1", "x2", "y2"])) {
     return { ...base, kind: "line", geometry: { x1: geometry.x1, y1: geometry.y1, x2: geometry.x2, y2: geometry.y2 } };
   }
+
   if (value.kind === "rectangle" && hasFiniteNumbers(geometry, ["x", "y", "width", "height"])) {
     return { ...base, kind: "rectangle", geometry: { x: geometry.x, y: geometry.y, width: geometry.width, height: geometry.height } };
+  }
+
+  function validateGradientPaint(value: unknown): DrawingProject["shapes"][number]["style"]["gradient"] {
+    if (!isRecord(value) || !isColor(value.startColor) || !isColor(value.endColor)) {
+      throw new Error("Invalid project gradient.");
+    }
+    if (value.type === "linear" && isFiniteNumber(value.angle)) {
+      return { type: "linear", startColor: value.startColor, endColor: value.endColor, angle: value.angle };
+    }
+    if (value.type === "radial") {
+      return { type: "radial", startColor: value.startColor, endColor: value.endColor };
+    }
+    throw new Error("Invalid project gradient.");
+  }
+
+  function validateShapeEffect(value: unknown): DrawingProject["shapes"][number]["style"]["effect"] {
+    if (!isRecord(value) || value.type !== "blur" || !isFiniteNumber(value.strength) ||
+        value.strength <= 0 || value.strength > 50) {
+      throw new Error("Invalid project shape effect.");
+    }
+    return { type: "blur", strength: value.strength };
   }
   if (value.kind === "ellipse" && hasFiniteNumbers(geometry, ["cx", "cy", "rx", "ry"])) {
     return { ...base, kind: "ellipse", geometry: { cx: geometry.cx, cy: geometry.cy, rx: geometry.rx, ry: geometry.ry } };
@@ -260,6 +291,7 @@ function validateImportedSvg(value: unknown): DrawingProject["importedSvgs"][num
       !isValidOpacity(value.opacity) || typeof value.visible !== "boolean") {
     throw new Error("Invalid project SVG reference.");
   }
+
   return {
     id: value.id,
     ...optionalObjectTransform(value),
@@ -271,6 +303,30 @@ function validateImportedSvg(value: unknown): DrawingProject["importedSvgs"][num
     height: value.height,
     opacity: value.opacity,
     visible: value.visible,
+  };
+}
+
+function validateTextObject(value: unknown): DrawingProject["texts"][number] {
+  if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 ||
+      typeof value.text !== "string" || value.text.length === 0 || value.text.length > 10_000 ||
+      !isFiniteNumber(value.x) || !isFiniteNumber(value.y) ||
+      typeof value.fontFamily !== "string" || value.fontFamily.length === 0 ||
+      !isFiniteNumber(value.fontSize) || value.fontSize <= 0 ||
+      !isColor(value.color) || !isValidOpacity(value.opacity) ||
+      (value.align !== "left" && value.align !== "center" && value.align !== "right")) {
+    throw new Error("Invalid project text.");
+  }
+  return {
+    id: value.id,
+    ...optionalObjectTransform(value),
+    text: value.text,
+    x: value.x,
+    y: value.y,
+    fontFamily: value.fontFamily,
+    fontSize: value.fontSize,
+    color: value.color,
+    opacity: value.opacity,
+    align: value.align,
   };
 }
 
@@ -340,7 +396,7 @@ function validateProjectRelationships(project: DrawingProject): void {
     }
   }
 
-  const objects = [...project.strokes, ...project.shapes, ...project.rasterReferences, ...project.importedSvgs];
+  const objects = [...project.strokes, ...project.shapes, ...project.rasterReferences, ...project.importedSvgs, ...project.texts];
   const objectIds = new Set(objects.map((object) => object.id));
   for (const object of objects) {
     if (object.layerId !== undefined && !layersById.has(object.layerId)) {

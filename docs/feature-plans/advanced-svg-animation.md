@@ -3,9 +3,10 @@
 ## Status
 
 Phase 1 has a versioned project-schema foundation and applies stored object and
-layer transforms in PixiJS previews and SVG exports. This roadmap describes
-future work; animation playback and layer editing controls are not shipped
-application behavior.
+layer transforms in PixiJS previews and SVG exports. The initial runtime slice
+now supports preset playback for stored object and layer animations, with
+accessible play/pause/reset and reduced-motion controls. Full layer editing,
+advanced SVG authoring, and compatibility fallback work remain future phases.
 
 ## Problem and proposed approach
 
@@ -28,7 +29,8 @@ adding independent one-off representations.
 
 - Animations apply to both individual objects and named layers/groups.
 - The first editor UI uses predefined animation presets with duration, delay,
-  and loop/playback controls; it does not require a visual timeline.
+  iteration, direction, easing, and play/pause/reset controls; it does not
+  require a visual timeline.
 - Downloaded editable SVG preserves animation metadata, but standard SVG export
   is static in the first release.
 - The broader advanced-SVG roadmap includes layers, transforms, gradients,
@@ -54,24 +56,25 @@ adding independent one-off representations.
 
 ### Phase 2: Runtime animation engine
 
-- Build a pure animation evaluator/controller that maps elapsed time to
+- [x] Build a pure animation evaluator/controller that maps elapsed time to
   property values without coupling the project model to PixiJS display objects.
-- Implement a deliberately small initial preset set, such as fade, move,
-  scale, rotate, draw/reveal, pulse, and color/opacity emphasis.
-- Support animation targets at object and layer scope, deterministic start/stop,
-  looping, delay, reverse/alternate direction, and a global play/pause/reset
-  state.
-- Drive updates from the PixiJS ticker while keeping static rendering and export
-  deterministic when animation is paused or reset.
-- Respect `prefers-reduced-motion` by default and provide a user-visible motion
-  toggle; avoid animation-only status or interaction failures.
+- [x] Implement the initial fade, move, scale, rotate, draw, pulse, and
+  emphasis preset set.
+- [x] Support object and layer targets, deterministic playback, looping, delay,
+  reverse/alternate direction, and play/pause/reset state.
+- [x] Drive updates from the PixiJS ticker while keeping static rendering and
+  export deterministic when animation is paused or reset.
+- [x] Respect `prefers-reduced-motion` by default and provide a user-visible
+  reduced-motion toggle.
 
 ### Phase 3: Preset-based editor controls
 
-- Add a compact animation panel with target selection, preset selection,
-  duration, delay, loop mode, easing, enable/disable, play, pause, and reset.
-- Add layer/object selection and ordering controls so animation targets can be
-  chosen without editing raw metadata.
+- [x] Add a compact animation panel with target selection, preset selection,
+  duration, delay, iteration count, direction, easing, play, pause, reset, and
+  reduced-motion controls.
+- [x] Add layer selection, naming, ordering, visibility, and opacity controls.
+  Object-layer assignment is also available; richer target management remains
+  future work.
 - Define behavior for deleting targets, undo/redo, clearing the canvas, and
   importing/exporting projects with animations.
 - Keep controls keyboard accessible and expose animation state through labels,
@@ -94,11 +97,17 @@ adding independent one-off representations.
 
 - Add gradient fills and strokes through a shared paint model that exports
   portable SVG definitions.
-- Add filter/effect definitions with a constrained supported subset and clear
+- The initial two-color linear and radial gradient fill slice is implemented
+  for new filled shapes with PixiJS rendering, validation, and portable SVG
+  definitions. Gradient strokes and shared paint resources remain future work.
+- [x] Add filter/effect definitions with a constrained blur subset and clear
   performance/resource limits.
 - Add text objects with font family, size, alignment, fill/stroke, and a policy
   for missing fonts and text-to-path conversion.
-- Add path/object selection and point editing built on stable IDs and the
+- The initial text slice is implemented with editable text, font size/family,
+  color, alignment, transforms, validation, PixiJS preview, SVG export, and a
+  generic sans-serif fallback. Text-to-path conversion remains future work.
+- [x] Add curved-path selection and point editing built on stable IDs and the
   existing geometry helpers.
 - Add layer/group duplication, reordering, isolation, visibility, and opacity
   controls.
@@ -109,9 +118,9 @@ adding independent one-off representations.
 - Add unit tests for schema migration, validation, animation interpolation,
   preset behavior, reduced-motion defaults, layer targeting, and static versus
   editable export.
-- Add browser-level interaction coverage for animation controls, selection,
-  playback, reset, and keyboard accessibility when the project’s test setup
-  supports it.
+- Maintain the documented browser smoke checklist for animation controls,
+  selection, playback, reset, imports, downloads, and keyboard accessibility;
+  automated browser coverage remains future work.
 - Update the user guide, README feature/architecture sections, administrator
   guidance where performance or browser support changes, and relevant ADRs.
 - Record a release note and document explicit limitations for unsupported SVG

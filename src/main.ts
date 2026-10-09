@@ -4,6 +4,7 @@ import { appendShape, appendStroke, applyFill, cloneProject, createProject, dese
 import { createSvgBlob, getSvgDimensions } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
 import { findFillTarget, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke } from "./geometry";
+import { applyProjectTransform, createProjectLayerContainers } from "./transforms";
 import type { DrawingProject, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle } from "./types";
 import "./styles.css";
 
@@ -25,7 +26,8 @@ let fillColor = "#93c5fd";
 let fillMode: "color" | "none" = "color";
 let activePoints: StrokePoint[] = [];
 let activePointer: { id: number; type: PointerKind; startedAt: number } | null = null;
-let drawingLayer: Graphics;
+let drawingLayer: Container;
+let previewLayer: Graphics;
 let referencesLayer: Container;
 let viewportLayer: Container;
 let gridLayer: Graphics;
@@ -117,7 +119,9 @@ pixi.stage.hitArea = pixi.screen;
 viewportLayer = new Container();
 referencesLayer = new Container();
 gridLayer = new Graphics();
-drawingLayer = new Graphics();
+drawingLayer = new Container();
+previewLayer = new Graphics();
+drawingLayer.addChild(previewLayer);
 viewportLayer.addChild(referencesLayer, gridLayer, drawingLayer);
 pixi.stage.addChild(viewportLayer);
 viewportMask = new Graphics().rect(0, 0, project.width, project.height).fill("#ffffff");
@@ -135,17 +139,39 @@ const redraw = (): void => {
       gridLayer.moveTo(0, y).lineTo(project.width, y).stroke({ color: y % (gridSize * 2) === 0 ? "#94a3b8" : "#cbd5e1", alpha: y % (gridSize * 2) === 0 ? 0.5 : 0.28, width: y % (gridSize * 2) === 0 ? 1.5 : 1 });
     }
   }
-  drawingLayer.clear();
-  for (const stroke of project.strokes) drawRecordedStroke(stroke);
-  for (const shape of project.shapes) drawShape(shape);
+  drawingLayer.removeChildren().forEach((child) => {
+    if (child !== previewLayer) child.destroy({ children: true });
+  });
+  previewLayer.clear();
+  const layerContainers = createProjectLayerContainers(drawingLayer, project.layers);
+  previewLayer.zIndex = Number.MAX_SAFE_INTEGER;
+  const parentFor = (layerId: string | undefined): Container => {
+    const parent = layerId === undefined ? undefined : layerContainers.get(layerId);
+    return parent ?? drawingLayer;
+  };
+  for (const stroke of project.strokes) {
+    const graphic = new Graphics();
+    applyProjectTransform(graphic, stroke.transform);
+    if (stroke.layerId === undefined) graphic.zIndex = Number.MAX_SAFE_INTEGER;
+    drawRecordedStroke(graphic, stroke);
+    parentFor(stroke.layerId).addChild(graphic);
+  }
+  for (const shape of project.shapes) {
+    const graphic = new Graphics();
+    applyProjectTransform(graphic, shape.transform);
+    if (shape.layerId === undefined) graphic.zIndex = Number.MAX_SAFE_INTEGER;
+    drawShape(graphic, shape);
+    parentFor(shape.layerId).addChild(graphic);
+  }
+  drawingLayer.addChild(previewLayer);
 };
 
-const drawStroke = (points: StrokePoint[], style: StrokeStyle): void => {
+const drawStroke = (graphics: Graphics, points: StrokePoint[], style: StrokeStyle): void => {
   if (points.length < 2) return;
   const [first, ...rest] = points;
-  drawingLayer.moveTo(first.x, first.y);
-  for (const point of rest) drawingLayer.lineTo(point.x, point.y);
-  drawingLayer.stroke({
+  graphics.moveTo(first.x, first.y);
+  for (const point of rest) graphics.lineTo(point.x, point.y);
+  graphics.stroke({
     width: style.width,
     color: style.color,
     alpha: style.opacity,
@@ -154,13 +180,13 @@ const drawStroke = (points: StrokePoint[], style: StrokeStyle): void => {
   });
 };
 
-const drawRecordedStroke = (stroke: Stroke): void => {
+const drawRecordedStroke = (graphics: Graphics, stroke: Stroke): void => {
   const [first, ...rest] = stroke.points;
   if (!first) return;
-  drawingLayer.moveTo(first.x, first.y);
-  for (const point of rest) drawingLayer.lineTo(point.x, point.y);
-  if (stroke.fill && isClosedStroke(stroke)) drawingLayer.closePath().fill(stroke.fill);
-  drawingLayer.stroke({
+  graphics.moveTo(first.x, first.y);
+  for (const point of rest) graphics.lineTo(point.x, point.y);
+  if (stroke.fill && isClosedStroke(stroke)) graphics.closePath().fill(stroke.fill);
+  graphics.stroke({
     width: stroke.style.width,
     color: stroke.style.color,
     alpha: stroke.style.opacity,
@@ -169,34 +195,34 @@ const drawRecordedStroke = (stroke: Stroke): void => {
   });
 };
 
-const drawShape = (shape: Shape): void => {
+const drawShape = (graphics: Graphics, shape: Shape): void => {
   const fill = shape.style.fill ?? undefined;
   const stroke = { width: shape.style.stroke.width, color: shape.style.stroke.color, alpha: shape.style.stroke.opacity, cap: shape.style.stroke.lineCap, join: shape.style.stroke.lineJoin };
   if (shape.kind === "line") {
     const g = shape.geometry;
-    drawingLayer.moveTo(g.x1, g.y1).lineTo(g.x2, g.y2).stroke(stroke);
+    graphics.moveTo(g.x1, g.y1).lineTo(g.x2, g.y2).stroke(stroke);
   }
   if (shape.kind === "rectangle") {
     const g = shape.geometry;
-    drawingLayer.rect(g.x, g.y, g.width, g.height);
-    if (fill) drawingLayer.fill(fill);
-    drawingLayer.stroke(stroke);
+    graphics.rect(g.x, g.y, g.width, g.height);
+    if (fill) graphics.fill(fill);
+    graphics.stroke(stroke);
   }
   if (shape.kind === "ellipse") {
     const g = shape.geometry;
-    drawingLayer.ellipse(g.cx, g.cy, g.rx, g.ry);
-    if (fill) drawingLayer.fill(fill);
-    drawingLayer.stroke(stroke);
+    graphics.ellipse(g.cx, g.cy, g.rx, g.ry);
+    if (fill) graphics.fill(fill);
+    graphics.stroke(stroke);
   }
   if (shape.kind === "polygon") {
     const g = shape.geometry;
-    drawingLayer.poly(g.points.flatMap((point) => [point.x, point.y]), true);
-    if (fill) drawingLayer.fill(fill);
-    drawingLayer.stroke(stroke);
+    graphics.poly(g.points.flatMap((point) => [point.x, point.y]), true);
+    if (fill) graphics.fill(fill);
+    graphics.stroke(stroke);
   }
   if (shape.kind === "curve") {
     const g = shape.geometry;
-    drawingLayer.moveTo(g.x1, g.y1).quadraticCurveTo(g.cx, g.cy, g.x2, g.y2).stroke(stroke);
+    graphics.moveTo(g.x1, g.y1).quadraticCurveTo(g.cx, g.cy, g.x2, g.y2).stroke(stroke);
   }
 };
 
@@ -449,8 +475,8 @@ pixi.canvas.addEventListener("pointermove", (event) => {
   else if (activeTool === "polygon") activePoints.push(nextPoint);
   else activePoints = [activePoints[0]!, nextPoint];
   redraw();
-  if (activeTool === "pen") drawStroke(activePoints, currentStyle);
-  else if (activePoints.length > 1 && isShapeTool(activeTool)) drawShape({ ...shapeFromPointList(activeTool, activePoints), id: "preview" } as Shape);
+  if (activeTool === "pen") drawStroke(previewLayer, activePoints, currentStyle);
+  else if (activePoints.length > 1 && isShapeTool(activeTool)) drawShape(previewLayer, { ...shapeFromPointList(activeTool, activePoints), id: "preview" } as Shape);
 });
 const finishStroke = (event: PointerEvent): void => {
   pointers.delete(event.pointerId);
@@ -779,17 +805,23 @@ async function createReferenceLayer(source: DrawingProject): Promise<{
   bounds: Map<string, { x: number; y: number; width: number; height: number }>;
 }> {
   const layer = new Container();
+  const layerContainers = createProjectLayerContainers(layer, source.layers);
   const bounds = new Map<string, { x: number; y: number; width: number; height: number }>();
+  const parentFor = (layerId: string | undefined): Container => {
+    const parent = layerId === undefined ? undefined : layerContainers.get(layerId);
+    return parent ?? layer;
+  };
   try {
     for (const reference of source.rasterReferences) {
       const texture = await Assets.load({ src: reference.dataUrl, parser: "texture" });
       const sprite = new Sprite(texture);
-      sprite.position.set(reference.x, reference.y);
       sprite.width = reference.width;
       sprite.height = reference.height;
+      applyProjectTransform(sprite, reference.transform, { x: reference.x, y: reference.y });
       sprite.alpha = reference.opacity;
       sprite.visible = reference.visible;
-      layer.addChild(sprite);
+      if (reference.layerId === undefined) sprite.zIndex = Number.MAX_SAFE_INTEGER;
+      parentFor(reference.layerId).addChild(sprite);
       bounds.set(reference.id, {
         x: reference.x,
         y: reference.y,
@@ -822,10 +854,11 @@ async function createReferenceLayer(source: DrawingProject): Promise<{
           svgDimensions.y + svgDimensions.height + yShift,
           localBounds.y + localBounds.height + yShift,
         );
-        imported.position.set(reference.x, reference.y);
+        applyProjectTransform(imported, reference.transform, { x: reference.x, y: reference.y });
         imported.alpha = reference.opacity * 0.8;
         imported.visible = reference.visible;
-        layer.addChild(imported);
+        if (reference.layerId === undefined) imported.zIndex = Number.MAX_SAFE_INTEGER;
+        parentFor(reference.layerId).addChild(imported);
         bounds.set(reference.id, {
           x: reference.x,
           y: reference.y,

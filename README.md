@@ -71,16 +71,17 @@ flowchart TD
     SVG --> Downloads[Downloaded SVG files]
 ```
 
-The viewport transform handles fit-to-canvas scaling, zoom, pan, and pointer coordinate conversion. It does not modify stored project coordinates. See [ADR-0001](docs/adr/0001-pixi-client-rendering.md), [ADR-0002](docs/adr/0002-stroke-preserving-document-model.md), and [ADR-0003](docs/adr/0003-vector-svg-reference-preview.md).
+The viewport transform handles fit-to-canvas scaling, zoom, pan, and pointer coordinate conversion without modifying stored coordinates. Separate project-space transforms on objects and named layers apply consistently to PixiJS previews and SVG output. See [ADR-0001](docs/adr/0001-pixi-client-rendering.md), [ADR-0002](docs/adr/0002-stroke-preserving-document-model.md), and [ADR-0003](docs/adr/0003-vector-svg-reference-preview.md).
 
 ## Project Structure
 
 - `src/main.ts` — application shell, controls, PixiJS setup, input handling, imports, and downloads.
-- `src/types.ts` — versioned project, stroke, point, style, and reference types.
+- `src/types.ts` — versioned project, stroke, layer, transform, animation, and reference types.
 - `src/document.ts` — project creation, cloning, serialization, deserialization, and stroke appending.
 - `src/coordinates.ts` — viewport/project coordinate and zoom transform helpers.
 - `src/imports.ts` — SVG Blob construction helper.
 - `src/svg.ts` — standard and editable SVG generation.
+- `src/transforms.ts` — shared project transform application for PixiJS and SVG.
 - `src/styles.css` — responsive application styling.
 - `tests/` — document, coordinate, and import unit tests.
 - `IMPLEMENTATION_PLAN.md` — implementation phases and completed follow-up fixes.

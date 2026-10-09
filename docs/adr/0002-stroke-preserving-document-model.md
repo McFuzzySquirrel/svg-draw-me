@@ -30,7 +30,9 @@ Chosen option: “Store a versioned project model containing ordered strokes, fi
 The model's version 2 adds named layer/group metadata, optional project-space
 transforms, and validated animation definitions while retaining version 1 as a
 migration input. This schema foundation does not itself provide animation
-playback or layer editing controls.
+playback or layer editing controls. Object and ancestor-layer transforms are
+applied consistently in PixiJS previews and SVG serialization; translations use
+project units, rotations use radians, and scales use x/y factors.
 
 ### Positive Consequences
 

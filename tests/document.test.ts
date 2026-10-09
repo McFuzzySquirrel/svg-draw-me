@@ -291,4 +291,73 @@ describe("stroke-preserving document", () => {
     });
     expect(() => deserializeProject(serializeProject(project))).toThrow("Invalid project transform");
   });
+
+  it("applies object and hierarchical layer transforms in SVG exports", () => {
+    const project = appendStroke(
+      createProject(),
+      [
+        { x: 2, y: 3, pressure: 0.4, time: 10 },
+        { x: 4, y: 5, pressure: 0.8, time: 20 },
+      ],
+      { color: "#000000", width: 4, opacity: 1, lineCap: "round", lineJoin: "round" },
+      "pen",
+      10,
+      20,
+    );
+    project.strokes[0]!.transform = {
+      translateX: 10,
+      translateY: 20,
+      rotation: Math.PI / 2,
+      scaleX: 2,
+      scaleY: 3,
+    };
+    project.layers.push(
+      {
+        id: "parent",
+        name: "Parent",
+        order: 0,
+        visible: true,
+        opacity: 0.5,
+        parentId: null,
+        transform: { translateX: 5, translateY: 6, rotation: 0, scaleX: 1, scaleY: 1 },
+      },
+      {
+        id: "child",
+        name: "Child",
+        order: 1,
+        visible: true,
+        opacity: 0.8,
+        parentId: "parent",
+      },
+    );
+    project.strokes[0]!.layerId = "child";
+
+    const svg = projectToSvg(project);
+    expect(svg).toContain('data-layer="parent" opacity="0.5" transform="translate(5 6) rotate(0) scale(1 1)"');
+    expect(svg).toContain('<g data-layer="child" opacity="0.8">');
+    expect(svg).toContain('<g transform="translate(10 20) rotate(90) scale(2 3)"><path d="M 2 3 L 4 5"');
+    expect(projectToSvg({
+      ...project,
+      layers: [{ ...project.layers[0]!, visible: false }],
+    })).not.toContain('data-layer="parent"');
+  });
+
+  it("keeps raster references omitted from standard SVG unless requested", () => {
+    const project = createProject();
+    project.rasterReferences.push({
+      id: "raster-1",
+      name: "Reference",
+      dataUrl: "data:image/png;base64,AA==",
+      x: 20,
+      y: 30,
+      width: 40,
+      height: 50,
+      opacity: 0.5,
+      visible: true,
+      transform: { translateX: 1, translateY: 2, rotation: 0, scaleX: 2, scaleY: 2 },
+    });
+
+    expect(projectToSvg(project)).not.toContain("<image");
+    expect(projectToSvg(project, true)).toContain('transform="translate(21 32) rotate(0) scale(2 2)"');
+  });
 });

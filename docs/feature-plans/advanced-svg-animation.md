@@ -2,9 +2,10 @@
 
 ## Status
 
-Implementation has begun with the Phase 1 project-schema foundation. This
-roadmap describes future work; runtime animation and editor controls are not
-shipped application behavior.
+Phase 1 has a versioned project-schema foundation and applies stored object and
+layer transforms in PixiJS previews and SVG exports. This roadmap describes
+future work; animation playback and layer editing controls are not shipped
+application behavior.
 
 ## Problem and proposed approach
 
@@ -44,6 +45,8 @@ adding independent one-off representations.
   relationships; preserve the current flat project as a valid migration input.
 - Add transform state using a consistent project-space representation and
   centralize transform application for PixiJS rendering and SVG serialization.
+  Translation uses project-space units, rotation uses radians, and scale uses
+  dimensionless x/y factors.
 - Define validated animation data: preset type, target object/layer ID, duration,
   delay, iteration/loop mode, direction, easing, and enabled state.
 - Add deserialization migration and invalid-data handling so older version-1

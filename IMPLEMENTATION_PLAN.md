@@ -54,6 +54,14 @@ Drawing input is clamped to the project dimensions, while the viewport mask and 
 
 Canvas width and height and grid spacing are editable from the toolbar. Importing a raster image or SVG expands the canvas to include the reference bounds. The eraser removes whole raster/SVG reference layers as well as strokes and shapes, and undo restores erased references from both new and loaded projects.
 
+## Follow-up feature — Advanced SVG model foundation (in progress)
+
+Project schema version 2 adds named layers/groups, stable object/layer targets,
+project-space transforms, and validated animation definitions while migrating
+version-1 project files. PixiJS previews and SVG exports apply object and
+ancestor-layer transforms, layer visibility, opacity, and ordering. Animation
+playback and layer editing controls remain future work.
+
 ## Phase 1 — Foundation and document model
 
 ### Scope

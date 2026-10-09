@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 export const DEFAULT_PROJECT_SIZE = { width: 1200, height: 800 };
+const MAX_LAYER_DEPTH = 32;
 
 export function createProject(
   width = DEFAULT_PROJECT_SIZE.width,
@@ -334,6 +335,7 @@ function validateProjectRelationships(project: DrawingProject): void {
     while (current) {
       if (ancestors.has(current.id)) throw new Error("Invalid project layer hierarchy.");
       ancestors.add(current.id);
+      if (ancestors.size > MAX_LAYER_DEPTH) throw new Error("Project layer nesting limit exceeded.");
       current = current.parentId === null ? undefined : layersById.get(current.parentId);
     }
   }

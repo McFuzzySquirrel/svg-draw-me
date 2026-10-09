@@ -478,4 +478,38 @@ describe("stroke-preserving document", () => {
     expect(projectToSvg(project)).not.toContain("<image");
     expect(projectToSvg(project, true)).toContain('transform="translate(21 32) rotate(0) scale(2 2)"');
   });
+
+  it("rejects duplicate object IDs and paths without an initial moveto", () => {
+    const project = createProject();
+    project.shapes.push({
+      id: "same",
+      kind: "path",
+      geometry: { commands: [{ type: "L", x: 0, y: 0 }] },
+      style: { stroke: { color: "#000000", width: 1, opacity: 1, lineCap: "round", lineJoin: "round" }, fill: null },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+    });
+    expect(() => deserializeProject(serializeProject(project))).toThrow("Invalid project path command sequence");
+    const duplicate = createProject();
+    duplicate.shapes.push({
+      id: "same",
+      kind: "path",
+      geometry: { commands: [{ type: "M", x: 0, y: 0 }] },
+      style: { stroke: { color: "#000000", width: 1, opacity: 1, lineCap: "round", lineJoin: "round" }, fill: null },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+    });
+    duplicate.strokes.push({
+      id: "same",
+      points: [{ x: 0, y: 0, pressure: 1, time: 0 }, { x: 1, y: 1, pressure: 1, time: 1 }],
+      style: { color: "#000000", width: 1, opacity: 1, lineCap: "round", lineJoin: "round" },
+      fill: null,
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+    });
+    expect(() => deserializeProject(serializeProject(duplicate))).toThrow("Duplicate project object ID");
+  });
 });

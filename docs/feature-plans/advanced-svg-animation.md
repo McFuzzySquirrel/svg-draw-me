@@ -5,8 +5,10 @@
 Phase 1 has a versioned project-schema foundation and applies stored object and
 layer transforms in PixiJS previews and SVG exports. The initial runtime slice
 now supports preset playback for stored object and layer animations, with
-accessible play/pause/reset and reduced-motion controls. Full layer editing,
-advanced SVG authoring, and compatibility fallback work remain future phases.
+accessible play/pause/reset and reduced-motion controls. Layer visibility,
+opacity, ordering, naming, and object assignment are implemented; richer
+grouping and positioning, advanced SVG authoring, and compatibility fallback
+work remain future phases.
 
 ## Problem and proposed approach
 

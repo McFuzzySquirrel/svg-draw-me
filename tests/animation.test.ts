@@ -25,6 +25,13 @@ describe("animation evaluator", () => {
       translateX: 0,
       translateY: 0,
     });
+
+  });
+
+  it("finishes alternate iterations at their actual final direction", () => {
+    const alternating = animation({ iterations: 2, direction: "alternate" });
+    expect(evaluateAnimation(alternating, 2_100).progress).toBe(0);
+    expect(evaluateAnimation({ ...alternating, direction: "alternate-reverse" }, 2_100).progress).toBe(1);
   });
 
   it("supports alternate direction and finite iteration completion", () => {

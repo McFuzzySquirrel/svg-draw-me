@@ -1,6 +1,20 @@
-import type { DrawingProject, FillTarget, Shape, Stroke } from "./types";
+import type { DrawingProject, FillTarget, ProjectTransform, Shape, Stroke } from "./types";
 
 export const FREEHAND_FILL_GAP = 28;
+
+export function inverseTransformPoint(
+  point: { x: number; y: number },
+  transform: ProjectTransform | undefined,
+): { x: number; y: number } {
+  if (!transform) return point;
+  const translated = { x: point.x - transform.translateX, y: point.y - transform.translateY };
+  const cosine = Math.cos(-transform.rotation);
+  const sine = Math.sin(-transform.rotation);
+  return {
+    x: (translated.x * cosine - translated.y * sine) / transform.scaleX,
+    y: (translated.x * sine + translated.y * cosine) / transform.scaleY,
+  };
+}
 
 export function isClosedStroke(stroke: Stroke, tolerance = FREEHAND_FILL_GAP): boolean {
   if (stroke.points.length < 3) return false;
@@ -15,7 +29,7 @@ export function pointInStrokeLoop(point: { x: number; y: number }, stroke: Strok
 }
 
 export function isFillableShape(shape: Shape): boolean {
-  return shape.kind === "rectangle" || shape.kind === "ellipse" || shape.kind === "polygon";
+  return shape.kind === "rectangle" || shape.kind === "ellipse" || shape.kind === "polygon" || shape.kind === "path";
 }
 
 export function pointInShapeFill(point: { x: number; y: number }, shape: Shape): boolean {
@@ -29,6 +43,12 @@ export function pointInShapeFill(point: { x: number; y: number }, shape: Shape):
     return ((point.x - g.cx) / Math.max(g.rx, 1)) ** 2 + ((point.y - g.cy) / Math.max(g.ry, 1)) ** 2 <= 1;
   }
   if (shape.kind === "polygon") return pointInPolygon(point, shape.geometry.points);
+  if (shape.kind === "path") {
+    const points = shape.geometry.commands.flatMap((command) =>
+      command.type === "M" || command.type === "L" ? [{ x: command.x, y: command.y }]
+        : command.type === "Q" || command.type === "C" ? [{ x: command.x, y: command.y }] : []);
+    return points.length >= 3 && pointInPolygon(point, points);
+  }
   return false;
 }
 
@@ -36,16 +56,18 @@ export function findFillTarget(
   project: DrawingProject,
   point: { x: number; y: number },
   radius: number,
+  toLocal: (object: Stroke | Shape, point: { x: number; y: number }) => { x: number; y: number } = (_object, next) => next,
 ): FillTarget | null {
   for (let index = project.shapes.length - 1; index >= 0; index -= 1) {
     const shape = project.shapes[index]!;
-    if (isFillableShape(shape) && (pointInShapeFill(point, shape) || pointHitsShape(point, shape, radius))) {
+    const localPoint = toLocal(shape, point);
+    if (isFillableShape(shape) && (pointInShapeFill(localPoint, shape) || pointHitsShape(localPoint, shape, radius))) {
       return { type: "shape", id: shape.id };
     }
   }
   for (let index = project.strokes.length - 1; index >= 0; index -= 1) {
     const stroke = project.strokes[index]!;
-    if (pointInStrokeLoop(point, stroke)) return { type: "stroke", id: stroke.id };
+    if (pointInStrokeLoop(toLocal(stroke, point), stroke)) return { type: "stroke", id: stroke.id };
   }
   return null;
 }
@@ -96,6 +118,13 @@ export function pointHitsShape(point: { x: number; y: number }, shape: Shape, ra
     const g = shape.geometry;
     if (shape.style.fill !== null && pointInPolygon(point, g.points)) return true;
     return g.points.some((current, index) => distanceToSegment(point, current, g.points[(index + 1) % g.points.length]!) <= radius);
+  }
+  if (shape.kind === "path") {
+    const points = shape.geometry.commands.flatMap((command) =>
+      command.type === "M" || command.type === "L" ? [{ x: command.x, y: command.y }]
+        : command.type === "Q" || command.type === "C" ? [{ x: command.x, y: command.y }] : []);
+    if (shape.style.fill !== null && pointInPolygon(point, points)) return true;
+    return points.some((current, index) => distanceToSegment(point, current, points[(index + 1) % points.length]!) <= radius);
   }
 
   return false;

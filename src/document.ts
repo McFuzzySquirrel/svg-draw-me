@@ -252,7 +252,9 @@ function validateShape(value: unknown): Shape {
     return { ...base, kind: "curve", geometry: { x1: geometry.x1, y1: geometry.y1, cx: geometry.cx, cy: geometry.cy, x2: geometry.x2, y2: geometry.y2 } };
   }
   if (value.kind === "path" && Array.isArray(geometry.commands) && geometry.commands.length > 0) {
-    return { ...base, kind: "path", geometry: { commands: geometry.commands.map(validatePathCommand) } };
+    const commands = geometry.commands.map(validatePathCommand);
+    if (commands[0]?.type !== "M") throw new Error("Invalid project path command sequence.");
+    return { ...base, kind: "path", geometry: { commands } };
   }
   if (value.kind === "polygon" && Array.isArray(geometry.points) && geometry.points.length >= 2) {
     return { ...base, kind: "polygon", geometry: { points: geometry.points.map(validateShapePoint) } };
@@ -400,6 +402,11 @@ function validateLayer(value: unknown): ProjectLayer {
 }
 
 function validateProjectRelationships(project: DrawingProject): void {
+  const assertUnique = (ids: string[], message: string): void => {
+    if (new Set(ids).size !== ids.length) throw new Error(message);
+  };
+  assertUnique(project.layers.map((layer) => layer.id), "Duplicate project layer ID.");
+  assertUnique(project.animations.map((animation) => animation.id), "Duplicate project animation ID.");
   const layersById = new Map(project.layers.map((layer) => [layer.id, layer]));
   for (const layer of project.layers) {
     if (layer.parentId !== null && !layersById.has(layer.parentId)) {
@@ -416,6 +423,7 @@ function validateProjectRelationships(project: DrawingProject): void {
   }
 
   const objects = [...project.strokes, ...project.shapes, ...project.rasterReferences, ...project.importedSvgs, ...project.texts];
+  assertUnique(objects.map((object) => object.id), "Duplicate project object ID.");
   const objectIds = new Set(objects.map((object) => object.id));
   for (const object of objects) {
     if (object.layerId !== undefined && !layersById.has(object.layerId)) {

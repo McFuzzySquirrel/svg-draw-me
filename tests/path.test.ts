@@ -23,5 +23,13 @@ describe("editable SVG paths", () => {
   it("rejects unsupported and malformed paths", () => {
     expect(() => parseEditablePath("M0 0 A10 10 0 0 1 20 20")).toThrow(/Unsupported/);
     expect(() => parseEditablePath("M0 0 L")).toThrow(/Incomplete/);
+    expect(() => parseEditablePath("M0 0 Z 1 1")).toThrow();
+    expect(() => parseEditablePath("L0 0")).toThrow(/moveto/);
+  });
+
+  it("resets smooth control state after a new subpath", () => {
+    expect(parseEditablePath("M0 0 C1 1 2 2 3 3 M10 10 S20 20 30 30")[3]).toEqual({
+      type: "C", x1: 10, y1: 10, x2: 20, y2: 20, x: 30, y: 30,
+    });
   });
 });

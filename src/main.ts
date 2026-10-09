@@ -4,7 +4,7 @@ import { clampProjectPoint, viewportToProject, zoomTransformAtPoint } from "./co
 import { appendShape, appendStroke, applyFill, cloneProject, createProject, deserializeProject, dimensionsForBounds, serializeProject } from "./document";
 import { createSvgBlob, findUnsupportedSvgFeatures, getSvgDimensions } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
-import { findFillTarget, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke } from "./geometry";
+import { findFillTarget, inverseTransformPoint, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke } from "./geometry";
 import { parseEditablePath } from "./path";
 import { applyProjectTransform, createProjectLayerContainers } from "./transforms";
 import type { DrawingProject, GradientPaint, PathCommand, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle, TextObject } from "./types";
@@ -55,7 +55,44 @@ let referenceBounds = new Map<string, { x: number; y: number; width: number; hei
 let referenceRenderVersion = 0;
 let animationElapsed = 0;
 let animationPlaying = false;
+let animationAddEnabled = true;
 let reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const animatedDisplays: Array<{
+  display: Container;
+  targetType: "object" | "layer";
+  targetId: string;
+  position: { x: number; y: number };
+  scale: { x: number; y: number };
+  rotation: number;
+  alpha: number;
+}> = [];
+
+const updateAnimatedDisplays = (): boolean => {
+  let active = false;
+  for (const item of animatedDisplays) {
+    const sample = {
+      translateX: 0, translateY: 0, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1,
+    };
+    for (const animation of project.animations) {
+      if (animation.targetType !== item.targetType || animation.targetId !== item.targetId) continue;
+      const next = evaluateAnimation(animation, animationElapsed, reducedMotion);
+      sample.translateX += next.translateX;
+      sample.translateY += next.translateY;
+      sample.scaleX *= next.scaleX;
+      sample.scaleY *= next.scaleY;
+      sample.rotation += next.rotation;
+      sample.opacity *= next.opacity;
+      active ||= next.active || animation.enabled && !reducedMotion &&
+        (animation.iterations === "infinite" ||
+          animationElapsed < animation.delay + animation.duration * animation.iterations);
+    }
+    item.display.position.set(item.position.x + sample.translateX, item.position.y + sample.translateY);
+    item.display.scale.set(item.scale.x * sample.scaleX, item.scale.y * sample.scaleY);
+    item.display.rotation = item.rotation + sample.rotation;
+    item.display.alpha = item.alpha * sample.opacity;
+  }
+  return active;
+};
 
 const controls = document.createElement("section");
 controls.className = "controls";
@@ -208,7 +245,7 @@ const syncAnimationList = (): void => {
   }));
   if (project.animations.some((animation) => animation.id === current)) select.value = current;
   const selected = project.animations.find((animation) => animation.id === select.value);
-  if (enabled) enabled.checked = selected?.enabled ?? false;
+  if (enabled) enabled.checked = selected ? selected.enabled : animationAddEnabled;
 };
 
 const syncLayerControls = (): void => {
@@ -323,6 +360,7 @@ viewportMask.renderable = false;
 viewportLayer.mask = viewportMask;
 
 const redraw = (): void => {
+  animatedDisplays.length = 0;
   syncAnimationTargetOptions();
   syncAnimationList();
   syncLayerControls();
@@ -342,6 +380,7 @@ const redraw = (): void => {
   });
   previewLayer.clear();
   const layerContainers = createProjectLayerContainers(drawingLayer, project.layers);
+  let animationActive = false;
   const sampleFor = (targetType: "object" | "layer", targetId: string) => {
     const sample = {
       translateX: 0,
@@ -353,7 +392,13 @@ const redraw = (): void => {
     };
     for (const animation of project.animations) {
       if (animation.targetType !== targetType || animation.targetId !== targetId) continue;
+      if (animation.enabled && !reducedMotion &&
+          (animation.iterations === "infinite" ||
+            animationElapsed < animation.delay + animation.duration * animation.iterations)) {
+        animationActive = true;
+      }
       const next = evaluateAnimation(animation, animationElapsed, reducedMotion);
+      animationActive ||= next.active;
       sample.translateX += next.translateX;
       sample.translateY += next.translateY;
       sample.scaleX *= next.scaleX;
@@ -376,7 +421,18 @@ const redraw = (): void => {
   };
   for (const layer of project.layers) {
     const container = layerContainers.get(layer.id);
-    if (container) applySample(container, sampleFor("layer", layer.id));
+    if (container) {
+      animatedDisplays.push({
+        display: container,
+        targetType: "layer",
+        targetId: layer.id,
+        position: { x: container.position.x, y: container.position.y },
+        scale: { x: container.scale.x, y: container.scale.y },
+        rotation: container.rotation,
+        alpha: container.alpha,
+      });
+      applySample(container, sampleFor("layer", layer.id));
+    }
   }
   previewLayer.zIndex = Number.MAX_SAFE_INTEGER;
   const parentFor = (layerId: string | undefined): Container => {
@@ -386,6 +442,12 @@ const redraw = (): void => {
   for (const stroke of project.strokes) {
     const graphic = new Graphics();
     applyProjectTransform(graphic, stroke.transform);
+    animatedDisplays.push({
+      display: graphic, targetType: "object", targetId: stroke.id,
+      position: { x: graphic.position.x, y: graphic.position.y },
+      scale: { x: graphic.scale.x, y: graphic.scale.y },
+      rotation: graphic.rotation, alpha: graphic.alpha,
+    });
     applySample(graphic, sampleFor("object", stroke.id));
     if (stroke.layerId === undefined) graphic.zIndex = Number.MAX_SAFE_INTEGER;
     drawRecordedStroke(graphic, stroke);
@@ -394,6 +456,12 @@ const redraw = (): void => {
   for (const shape of project.shapes) {
     const graphic = new Graphics();
     applyProjectTransform(graphic, shape.transform);
+    animatedDisplays.push({
+      display: graphic, targetType: "object", targetId: shape.id,
+      position: { x: graphic.position.x, y: graphic.position.y },
+      scale: { x: graphic.scale.x, y: graphic.scale.y },
+      rotation: graphic.rotation, alpha: graphic.alpha,
+    });
     applySample(graphic, sampleFor("object", shape.id));
     if (shape.layerId === undefined) graphic.zIndex = Number.MAX_SAFE_INTEGER;
     drawShape(graphic, shape);
@@ -412,13 +480,26 @@ const redraw = (): void => {
         align: text.align,
       },
     });
-    textNode.anchor.set(text.align === "left" ? 0 : text.align === "center" ? 0.5 : 1, 0);
+    textNode.anchor.set(text.align === "left" ? 0 : text.align === "center" ? 0.5 : 1, 1);
     applyProjectTransform(textNode, text.transform, { x: text.x, y: text.y });
+    textNode.alpha = text.opacity;
+    animatedDisplays.push({
+      display: textNode, targetType: "object", targetId: text.id,
+      position: { x: textNode.position.x, y: textNode.position.y },
+      scale: { x: textNode.scale.x, y: textNode.scale.y },
+      rotation: textNode.rotation, alpha: textNode.alpha,
+    });
     applySample(textNode, sampleFor("object", text.id));
     if (text.layerId === undefined) textNode.zIndex = Number.MAX_SAFE_INTEGER;
     parentFor(text.layerId).addChild(textNode);
   }
   drawingLayer.addChild(previewLayer);
+  if (animationPlaying && !animationActive) {
+    animationPlaying = false;
+    const button = controls.querySelector<HTMLButtonElement>("#animation-play");
+    button?.setAttribute("aria-pressed", "false");
+    if (button) button.textContent = "Play";
+  }
 };
 
 const drawStroke = (graphics: Graphics, points: StrokePoint[], style: StrokeStyle): void => {
@@ -572,27 +653,55 @@ const shapeFromPointList = (kind: ShapeKind, points: StrokePoint[]): ShapeDraft 
   return shapeFromPoints(kind, first, last);
 };
 
+const localObjectPoint = (object: { layerId?: string; transform?: import("./types").ProjectTransform }, point: { x: number; y: number }): { x: number; y: number } => {
+  let local = inverseTransformPoint(point, object.transform);
+  const layers: import("./types").ProjectLayer[] = [];
+  let layer = project.layers.find((candidate) => candidate.id === object.layerId);
+  while (layer) {
+    layers.push(layer);
+    layer = project.layers.find((candidate) => candidate.id === layer?.parentId);
+  }
+  for (const ancestor of layers) local = inverseTransformPoint(local, ancestor.transform);
+  return local;
+};
+
 const eraseAt = (point: { x: number; y: number }): void => {
   const radius = Math.max(currentStyle.width * 1.5, 8);
   let strokeIndex = -1;
   for (let index = project.strokes.length - 1; index >= 0; index -= 1) {
-    if (pointHitsStroke(point, project.strokes[index]!, radius)) {
+    if (pointHitsStroke(localObjectPoint(project.strokes[index]!, point), project.strokes[index]!, radius)) {
       strokeIndex = index;
       break;
     }
   }
   let shapeIndex = -1;
   for (let index = project.shapes.length - 1; index >= 0; index -= 1) {
-    if (pointHitsShape(point, project.shapes[index]!, radius)) {
+    if (pointHitsShape(localObjectPoint(project.shapes[index]!, point), project.shapes[index]!, radius)) {
       shapeIndex = index;
       break;
     }
   }
   if (strokeIndex >= 0 || shapeIndex >= 0) {
     history.push(cloneProject(project));
-    if (shapeIndex > strokeIndex) project.shapes.splice(shapeIndex, 1);
-    else project.strokes.splice(strokeIndex, 1);
+    const removedId = shapeIndex > strokeIndex
+      ? project.shapes.splice(shapeIndex, 1)[0]?.id
+      : project.strokes.splice(strokeIndex, 1)[0]?.id;
+    if (removedId) project.animations = project.animations.filter((animation) =>
+      animation.targetType !== "object" || animation.targetId !== removedId);
   } else {
+    const textIndex = project.texts.findIndex((text) =>
+      point.x >= text.x - (text.align === "right" ? text.text.length * text.fontSize * 0.6 : 0) &&
+      point.x <= text.x + (text.align === "left" ? text.text.length * text.fontSize * 0.6 : 0) &&
+      point.y >= text.y - text.fontSize && point.y <= text.y + radius);
+    if (textIndex >= 0) {
+      history.push(cloneProject(project));
+      const removedId = project.texts.splice(textIndex, 1)[0]?.id;
+      if (removedId) project.animations = project.animations.filter((animation) =>
+        animation.targetType !== "object" || animation.targetId !== removedId);
+      redraw();
+      setStatus("Object erased.");
+      return;
+    }
     let topmostSvgIndex = -1;
     for (let index = project.importedSvgs.length - 1; index >= 0; index -= 1) {
       const reference = project.importedSvgs[index]!;
@@ -632,7 +741,7 @@ const eraseAt = (point: { x: number; y: number }): void => {
 };
 
 const fillAt = (point: { x: number; y: number }): void => {
-  const target = findFillTarget(project, point, Math.max(currentStyle.width * 1.5, 8));
+  const target = findFillTarget(project, point, Math.max(currentStyle.width * 1.5, 8), localObjectPoint);
   if (!target) {
     setStatus("Tap inside a fillable shape or closed hand-drawn loop.");
     return;
@@ -816,7 +925,7 @@ pixi.canvas.addEventListener("pointermove", (event) => {
   if (!activePointer || activePointer.id !== event.pointerId) return;
   const nextPoint = toProjectPoint(event);
   if (activeTool === "pen") activePoints.push(nextPoint);
-  else if (activeTool === "polygon") activePoints.push(nextPoint);
+  else if (activeTool === "polygon" || activeTool === "path") activePoints.push(nextPoint);
   else activePoints = [activePoints[0]!, nextPoint];
   redraw();
   if (activeTool === "pen") drawStroke(previewLayer, activePoints, currentStyle);
@@ -866,6 +975,7 @@ controls.querySelector<HTMLButtonElement>("#animation-add")?.addEventListener("c
   const duration = Number(controls.querySelector<HTMLInputElement>("#animation-duration")?.value);
   const delay = Number(controls.querySelector<HTMLInputElement>("#animation-delay")?.value);
   const iterations = Number(controls.querySelector<HTMLInputElement>("#animation-iterations")?.value);
+  const enabled = controls.querySelector<HTMLInputElement>("#animation-enabled")?.checked ?? animationAddEnabled;
   if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(delay) || delay < 0 ||
       !Number.isSafeInteger(iterations) || iterations < 1) {
     return setStatus("Animation duration, delay, and iterations must be valid numbers.");
@@ -881,7 +991,7 @@ controls.querySelector<HTMLButtonElement>("#animation-add")?.addEventListener("c
     iterations,
     direction: controls.querySelector<HTMLSelectElement>("#animation-direction")?.value as DrawingProject["animations"][number]["direction"],
     easing: controls.querySelector<HTMLSelectElement>("#animation-easing")?.value as DrawingProject["animations"][number]["easing"],
-    enabled: true,
+    enabled,
   });
   animationElapsed = 0;
   redraw();
@@ -893,7 +1003,10 @@ controls.querySelector<HTMLSelectElement>("#animation-existing")?.addEventListen
 controls.querySelector<HTMLInputElement>("#animation-enabled")?.addEventListener("change", (event) => {
   const id = controls.querySelector<HTMLSelectElement>("#animation-existing")?.value;
   const animation = project.animations.find((candidate) => candidate.id === id);
-  if (!animation) return;
+  if (!animation) {
+    animationAddEnabled = (event.target as HTMLInputElement).checked;
+    return;
+  }
   history.push(cloneProject(project));
   animation.enabled = (event.target as HTMLInputElement).checked;
   redraw();
@@ -1011,6 +1124,19 @@ controls.querySelector<HTMLButtonElement>("#layer-save")?.addEventListener("clic
 });
 controls.querySelector<HTMLSelectElement>("#path-selected")?.addEventListener("change", syncPathEditor);
 controls.querySelector<HTMLSelectElement>("#path-node")?.addEventListener("change", syncPathEditor);
+controls.querySelector<HTMLSelectElement>("#path-command")?.addEventListener("change", (event) => {
+  const command = (event.target as HTMLSelectElement).value as PathCommand["type"];
+  const nodeIndex = Number(controls.querySelector<HTMLSelectElement>("#path-node")?.value);
+  if (nodeIndex === 0 && command !== "M") {
+    (event.target as HTMLSelectElement).value = "M";
+    return;
+  }
+  const keys = command === "Z" ? [] : command === "M" || command === "L" ? ["x", "y"]
+    : command === "Q" ? ["x", "y", "x1", "y1"] : ["x", "y", "x1", "y1", "x2", "y2"];
+  for (const key of ["x", "y", "x1", "y1", "x2", "y2"]) {
+    controls.querySelector<HTMLInputElement>(`#path-${key}`)?.toggleAttribute("disabled", !keys.includes(key));
+  }
+});
 controls.querySelector<HTMLButtonElement>("#path-save")?.addEventListener("click", () => {
   const id = controls.querySelector<HTMLSelectElement>("#path-selected")?.value;
   const shape = project.shapes.find((candidate) => candidate.id === id);
@@ -1023,6 +1149,7 @@ controls.querySelector<HTMLButtonElement>("#path-save")?.addEventListener("click
   if (!Number.isInteger(nodeIndex) || nodeIndex < 0 || nodeIndex >= shape.geometry.commands.length) {
     return setStatus("No path node selected.");
   }
+  if (nodeIndex === 0 && type !== "M") return setStatus("The first path node must be a move command.");
   let command: PathCommand;
   if (type === "Z") command = { type: "Z" };
   else if (type === "M" || type === "L") command = { type, x, y };
@@ -1131,10 +1258,12 @@ document.querySelector<HTMLButtonElement>("#undo")?.addEventListener("click", ()
   setStatus("Last action undone.");
 });
 document.querySelector<HTMLButtonElement>("#clear")?.addEventListener("click", () => {
-  if (!project.strokes.length && !project.shapes.length) return;
+  if (!project.strokes.length && !project.shapes.length && !project.texts.length && !project.animations.length) return;
   history.push(cloneProject(project));
   project.strokes = [];
   project.shapes = [];
+  project.texts = [];
+  project.animations = [];
   redraw();
   setStatus("Canvas cleared.");
 });
@@ -1265,37 +1394,55 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
       visible: true,
     };
     referenceRenderVersion += 1;
-    project.importedSvgs.push(reference);
     let editablePathCount = 0;
+    let readonlyPathCount = 0;
     const parsedSvg = new DOMParser().parseFromString(markup, "image/svg+xml");
+    const inheritedAttribute = (element: Element, name: string): string | null => {
+      let current: Element | null = element;
+      while (current) {
+        const value = current.getAttribute(name);
+        if (value !== null) return value;
+        current = current.parentElement;
+      }
+      return null;
+    };
     for (const pathElement of Array.from(parsedSvg.querySelectorAll("path"))) {
       const d = pathElement.getAttribute("d");
       if (!d) continue;
       try {
         const commands = parseEditablePath(d);
-        const importedStroke = pathElement.getAttribute("stroke") ?? "";
-        const importedFill = pathElement.getAttribute("fill") ?? "";
-        const strokeColor = /^#[0-9a-f]{6}$/i.test(importedStroke) ? importedStroke : "#111111";
-        const fillColorValue = /^#[0-9a-f]{6}$/i.test(importedFill) ? importedFill : null;
-        const strokeWidth = Number(pathElement.getAttribute("stroke-width"));
+        if (pathElement.hasAttribute("transform") || pathElement.parentElement?.closest("[transform]")) {
+          readonlyPathCount += 1;
+          continue;
+        }
+        const importedStroke = inheritedAttribute(pathElement, "stroke");
+        const importedFill = inheritedAttribute(pathElement, "fill") ?? "#000000";
+        const strokeColor = /^#[0-9a-f]{3,8}$/i.test(importedStroke ?? "") ? importedStroke! : "#000000";
+        const hasStroke = importedStroke !== null && importedStroke !== "none";
+        const fillColorValue = importedFill === "none" ? null : (/^#[0-9a-f]{3,8}$/i.test(importedFill) ? importedFill : "#000000");
+        const strokeWidth = Number(inheritedAttribute(pathElement, "stroke-width"));
+        const opacity = Number(inheritedAttribute(pathElement, "opacity") ?? "1");
         project.shapes.push({
           id: crypto.randomUUID(),
           kind: "path",
           geometry: { commands },
           transform: { translateX: reference.x, translateY: reference.y, rotation: 0, scaleX: 1, scaleY: 1 },
           style: {
-            stroke: { color: strokeColor, width: Number.isFinite(strokeWidth) && strokeWidth > 0 ? strokeWidth : 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+            stroke: { color: strokeColor, width: hasStroke && Number.isFinite(strokeWidth) && strokeWidth > 0 ? strokeWidth : 0, opacity: Number.isFinite(opacity) ? opacity : 1, lineCap: "round", lineJoin: "round" },
             fill: fillColorValue,
           },
           pointerType: "mouse",
           startedAt: 0,
           endedAt: 0,
         });
+        pathElement.remove();
         editablePathCount += 1;
       } catch {
-        // Keep unsupported or malformed paths in the original reference markup.
+        readonlyPathCount += 1;
       }
     }
+    reference.markup = new XMLSerializer().serializeToString(parsedSvg.documentElement);
+    project.importedSvgs.push(reference);
     referenceBounds.set(reference.id, { x: reference.x, y: reference.y, width, height });
     imported.position.set(reference.x, reference.y);
     imported.alpha = 0.8;
@@ -1303,7 +1450,10 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
     expandProjectToReferenceBounds(project, referenceBounds);
     await refreshReferenceLayer(project);
     const unsupported = findUnsupportedSvgFeatures(markup);
-    const pathStatus = editablePathCount ? ` ${editablePathCount} path${editablePathCount === 1 ? "" : "s"} are editable.` : "";
+    const pathStatus = editablePathCount
+      ? ` ${editablePathCount} path${editablePathCount === 1 ? "" : "s"} are editable${readonlyPathCount ? `; ${readonlyPathCount} remain read-only` : ""}.`
+      : readonlyPathCount ? ` ${readonlyPathCount} path${readonlyPathCount === 1 ? "" : "s"} remain read-only.` : "";
+    if (readonlyPathCount) unsupported.push("unsupported or transformed paths");
     setStatus(unsupported.length
       ? `${file.name} imported; preview may differ for unsupported features: ${unsupported.join(", ")}.${pathStatus}`
       : `${file.name} imported as a vector reference layer.${pathStatus}`);
@@ -1322,7 +1472,12 @@ const syncScale = (): void => {
 pixi.ticker.add((ticker) => {
   if (!animationPlaying) return;
   animationElapsed += ticker.deltaMS;
-  redraw();
+  if (!updateAnimatedDisplays()) {
+    animationPlaying = false;
+    const button = controls.querySelector<HTMLButtonElement>("#animation-play");
+    button?.setAttribute("aria-pressed", "false");
+    if (button) button.textContent = "Play";
+  }
 });
 pixi.renderer.on("resize", syncScale);
 syncScale();

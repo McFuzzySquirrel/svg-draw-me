@@ -35,7 +35,11 @@ export function evaluateAnimation(
   const duration = Math.max(animation.duration, 1);
   const iteration = Math.floor(elapsed / duration);
   if (animation.iterations !== "infinite" && iteration >= animation.iterations) {
-    return { ...sampleForProgress(animation, animation.direction === "reverse" ? 0 : 1), active: false };
+    const finalIteration = animation.iterations - 1;
+    const reverse = animation.direction === "reverse"
+      || animation.direction === "alternate" && finalIteration % 2 === 1
+      || animation.direction === "alternate-reverse" && finalIteration % 2 === 0;
+    return { ...sampleForProgress(animation, reverse ? 0 : 1), active: false };
   }
 
   let progress = (elapsed % duration) / duration;

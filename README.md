@@ -159,7 +159,7 @@ should:
 
 The following are planned or known gaps, not shipped features:
 
-- Layer management for visibility, opacity, positioning, and deletion.
+- Richer layer grouping and positioning controls.
 - Object-layer assignment and richer animation target management.
 - Elliptical arcs and other SVG path commands beyond the supported M/L/Q/C/Z subset.
 - More advanced stroke smoothing and pressure-based width rendering.

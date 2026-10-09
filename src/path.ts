@@ -46,6 +46,7 @@ export function parseEditablePath(d: string): PathCommand[] {
         y = startY;
         previousControl = undefined;
         previousType = undefined;
+        active = "";
         movePending = false;
         continue;
       }
@@ -64,6 +65,8 @@ export function parseEditablePath(d: string): PathCommand[] {
         startX = next.x;
         startY = next.y;
         movePending = false;
+        previousControl = undefined;
+        previousType = undefined;
       } else if (upper === "T") {
         const control = previousType === "Q" && previousControl
           ? { x: 2 * x - previousControl.x, y: 2 * y - previousControl.y }
@@ -121,6 +124,9 @@ export function parseEditablePath(d: string): PathCommand[] {
       setPosition(next);
       continue;
     }
+  }
+  if (commands.length === 0 || commands[0]?.type !== "M") {
+    throw new Error("Path must begin with a moveto command.");
   }
   return commands;
 }

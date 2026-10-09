@@ -17,6 +17,8 @@ export interface StrokeStyle {
 
 export interface Stroke {
   id: string;
+  layerId?: string;
+  transform?: ProjectTransform;
   points: StrokePoint[];
   style: StrokeStyle;
   fill: string | null;
@@ -38,6 +40,8 @@ export interface ShapeStyle {
 
 interface ShapeBase {
   id: string;
+  layerId?: string;
+  transform?: ProjectTransform;
   style: ShapeStyle;
   pointerType: PointerKind;
   startedAt: number;
@@ -59,6 +63,8 @@ export type ShapeDraft = Omit<Extract<Shape, { kind: "line" }>, "id">
 
 export interface RasterReference {
   id: string;
+  layerId?: string;
+  transform?: ProjectTransform;
   name: string;
   dataUrl: string;
   x: number;
@@ -71,6 +77,8 @@ export interface RasterReference {
 
 export interface ImportedSvg {
   id: string;
+  layerId?: string;
+  transform?: ProjectTransform;
   name: string;
   markup: string;
   x: number;
@@ -81,12 +89,49 @@ export interface ImportedSvg {
   visible: boolean;
 }
 
+export interface ProjectTransform {
+  translateX: number;
+  translateY: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+}
+
+export interface ProjectLayer {
+  id: string;
+  name: string;
+  order: number;
+  visible: boolean;
+  opacity: number;
+  parentId: string | null;
+  transform?: ProjectTransform;
+}
+
+export type AnimationPreset = "fade" | "move" | "scale" | "rotate" | "draw" | "pulse" | "emphasis";
+export type AnimationDirection = "normal" | "reverse" | "alternate" | "alternate-reverse";
+export type AnimationEasing = "linear" | "ease" | "ease-in" | "ease-out" | "ease-in-out";
+
+export interface AnimationDefinition {
+  id: string;
+  preset: AnimationPreset;
+  targetType: "object" | "layer";
+  targetId: string;
+  duration: number;
+  delay: number;
+  iterations: number | "infinite";
+  direction: AnimationDirection;
+  easing: AnimationEasing;
+  enabled: boolean;
+}
+
 export interface DrawingProject {
-  version: 1;
+  version: 2;
   width: number;
   height: number;
   strokes: Stroke[];
   shapes: Shape[];
   rasterReferences: RasterReference[];
   importedSvgs: ImportedSvg[];
+  layers: ProjectLayer[];
+  animations: AnimationDefinition[];
 }

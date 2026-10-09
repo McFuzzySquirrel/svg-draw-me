@@ -27,6 +27,11 @@ The product must export game or standard SVG assets without losing how the image
 
 Chosen option: “Store a versioned project model containing ordered strokes, first-class shapes, and reference layers”, because it preserves the drawing process while still allowing standard SVG geometry to be generated.
 
+The model's version 2 adds named layer/group metadata, optional project-space
+transforms, and validated animation definitions while retaining version 1 as a
+migration input. This schema foundation does not itself provide animation
+playback or layer editing controls.
+
 ### Positive Consequences
 
 - Individual strokes and shapes remain available for future editing and analysis.

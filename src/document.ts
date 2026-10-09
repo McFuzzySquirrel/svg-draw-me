@@ -1,4 +1,15 @@
-import type { DrawingProject, FillTarget, Shape, ShapeDraft, Stroke, StrokePoint, StrokeStyle } from "./types";
+import type {
+  AnimationDefinition,
+  DrawingProject,
+  FillTarget,
+  ProjectLayer,
+  ProjectTransform,
+  Shape,
+  ShapeDraft,
+  Stroke,
+  StrokePoint,
+  StrokeStyle,
+} from "./types";
 
 export const DEFAULT_PROJECT_SIZE = { width: 1200, height: 800 };
 
@@ -6,7 +17,17 @@ export function createProject(
   width = DEFAULT_PROJECT_SIZE.width,
   height = DEFAULT_PROJECT_SIZE.height,
 ): DrawingProject {
-  return { version: 1, width, height, strokes: [], shapes: [], rasterReferences: [], importedSvgs: [] };
+  return {
+    version: 2,
+    width,
+    height,
+    strokes: [],
+    shapes: [],
+    rasterReferences: [],
+    importedSvgs: [],
+    layers: [],
+    animations: [],
+  };
 }
 
 export function dimensionsForBounds(
@@ -34,20 +55,24 @@ export function serializeProject(project: DrawingProject): string {
 export function deserializeProject(serialized: string): DrawingProject {
   const parsed: unknown = JSON.parse(serialized);
   if (!isRecord(parsed)) throw new Error("Project data is not an object.");
-  if (parsed.version !== 1 || !Array.isArray(parsed.strokes)) {
+  if ((parsed.version !== 1 && parsed.version !== 2) || !Array.isArray(parsed.strokes)) {
     throw new Error("Unsupported or invalid project version.");
   }
   const width = projectDimension(parsed.width, DEFAULT_PROJECT_SIZE.width);
   const height = projectDimension(parsed.height, DEFAULT_PROJECT_SIZE.height);
-  return {
-    version: 1,
+  const project: DrawingProject = {
+    version: 2,
     width,
     height,
     strokes: parsed.strokes.map(validateStroke),
     shapes: optionalArray(parsed.shapes, "shapes").map(validateShape),
     rasterReferences: optionalArray(parsed.rasterReferences, "rasterReferences").map(validateRasterReference),
     importedSvgs: optionalArray(parsed.importedSvgs, "importedSvgs").map(validateImportedSvg),
+    layers: optionalArray(parsed.layers, "layers").map(validateLayer),
+    animations: optionalArray(parsed.animations, "animations").map(validateAnimation),
   };
+  validateProjectRelationships(project);
+  return project;
 }
 
 export function applyFill(project: DrawingProject, target: FillTarget, fill: string | null): DrawingProject {
@@ -130,6 +155,7 @@ function validateStroke(value: unknown): Stroke {
   }
   return {
     id: value.id,
+    ...optionalObjectTransform(value),
     points: value.points.map(validateStrokePoint),
     style,
     fill: value.fill ?? null,
@@ -173,6 +199,7 @@ function validateShape(value: unknown): Shape {
   const style = { stroke: validateStrokeStyle(value.style.stroke), fill: value.style.fill };
   const base = {
     id: value.id,
+    ...optionalObjectTransform(value),
     style,
     pointerType: value.pointerType,
     startedAt: value.startedAt,
@@ -213,6 +240,7 @@ function validateRasterReference(value: unknown): DrawingProject["rasterReferenc
   }
   return {
     id: value.id,
+    ...optionalObjectTransform(value),
     name: value.name,
     dataUrl: value.dataUrl,
     x: value.x,
@@ -233,6 +261,7 @@ function validateImportedSvg(value: unknown): DrawingProject["importedSvgs"][num
   }
   return {
     id: value.id,
+    ...optionalObjectTransform(value),
     name: value.name,
     markup: value.markup,
     x: value.x,
@@ -242,6 +271,126 @@ function validateImportedSvg(value: unknown): DrawingProject["importedSvgs"][num
     opacity: value.opacity,
     visible: value.visible,
   };
+}
+
+function optionalObjectTransform(value: Record<string, unknown>): {
+  layerId?: string;
+  transform?: ProjectTransform;
+} {
+  if (value.layerId !== undefined && (typeof value.layerId !== "string" || value.layerId.length === 0)) {
+    throw new Error("Invalid project object layer.");
+  }
+  if (value.transform === undefined) {
+    return value.layerId === undefined ? {} : { layerId: value.layerId };
+  }
+  if (!isRecord(value.transform)) throw new Error("Invalid project transform.");
+  const transform = validateTransform(value.transform);
+  return value.layerId === undefined ? { transform } : { layerId: value.layerId, transform };
+}
+
+function validateTransform(value: unknown): ProjectTransform {
+  if (!isRecord(value) || !isFiniteNumber(value.translateX) || !isFiniteNumber(value.translateY) ||
+      !isFiniteNumber(value.rotation) || !isFiniteNumber(value.scaleX) ||
+      !isFiniteNumber(value.scaleY) || value.scaleX === 0 || value.scaleY === 0) {
+    throw new Error("Invalid project transform.");
+  }
+  return {
+    translateX: value.translateX,
+    translateY: value.translateY,
+    rotation: value.rotation,
+    scaleX: value.scaleX,
+    scaleY: value.scaleY,
+  };
+}
+
+function validateLayer(value: unknown): ProjectLayer {
+  if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 ||
+      typeof value.name !== "string" || value.name.trim().length === 0 ||
+      !Number.isSafeInteger(value.order) || typeof value.visible !== "boolean" ||
+      !isValidOpacity(value.opacity) ||
+      !(value.parentId === null || (typeof value.parentId === "string" && value.parentId.length > 0))) {
+    throw new Error("Invalid project layer.");
+  }
+  const transform = value.transform === undefined ? undefined : validateTransform(value.transform);
+  return {
+    id: value.id,
+    name: value.name,
+    order: value.order as number,
+    visible: value.visible,
+    opacity: value.opacity,
+    parentId: value.parentId,
+    ...(transform === undefined ? {} : { transform }),
+  };
+}
+
+function validateProjectRelationships(project: DrawingProject): void {
+  const layersById = new Map(project.layers.map((layer) => [layer.id, layer]));
+  for (const layer of project.layers) {
+    if (layer.parentId !== null && !layersById.has(layer.parentId)) {
+      throw new Error("Invalid project layer parent.");
+    }
+    const ancestors = new Set<string>();
+    let current: ProjectLayer | undefined = layer;
+    while (current) {
+      if (ancestors.has(current.id)) throw new Error("Invalid project layer hierarchy.");
+      ancestors.add(current.id);
+      current = current.parentId === null ? undefined : layersById.get(current.parentId);
+    }
+  }
+
+  const objects = [...project.strokes, ...project.shapes, ...project.rasterReferences, ...project.importedSvgs];
+  const objectIds = new Set(objects.map((object) => object.id));
+  for (const object of objects) {
+    if (object.layerId !== undefined && !layersById.has(object.layerId)) {
+      throw new Error("Invalid project object layer.");
+    }
+  }
+  for (const animation of project.animations) {
+    const targetExists = animation.targetType === "layer"
+      ? layersById.has(animation.targetId)
+      : objectIds.has(animation.targetId);
+    if (!targetExists) throw new Error("Invalid project animation target.");
+  }
+}
+
+function validateAnimation(value: unknown): AnimationDefinition {
+  if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 ||
+      !isAnimationPreset(value.preset) ||
+      (value.targetType !== "object" && value.targetType !== "layer") ||
+      typeof value.targetId !== "string" || value.targetId.length === 0 ||
+      !isFiniteNumber(value.duration) || value.duration <= 0 ||
+      !isFiniteNumber(value.delay) || value.delay < 0 ||
+      !(value.iterations === "infinite" || (Number.isSafeInteger(value.iterations) && value.iterations > 0)) ||
+      !isAnimationDirection(value.direction) || !isAnimationEasing(value.easing) ||
+      typeof value.enabled !== "boolean") {
+    throw new Error("Invalid project animation.");
+  }
+  return {
+    id: value.id,
+    preset: value.preset,
+    targetType: value.targetType,
+    targetId: value.targetId,
+    duration: value.duration,
+    delay: value.delay,
+    iterations: value.iterations,
+    direction: value.direction,
+    easing: value.easing,
+    enabled: value.enabled,
+  };
+}
+
+function isAnimationPreset(value: unknown): value is AnimationDefinition["preset"] {
+  return value === "fade" || value === "move" || value === "scale" || value === "rotate" ||
+    value === "draw" || value === "pulse" || value === "emphasis";
+}
+
+function isAnimationDirection(value: unknown): value is AnimationDefinition["direction"] {
+  return value === "normal" || value === "reverse" || value === "alternate" || value === "alternate-reverse";
+}
+
+function isAnimationEasing(value: unknown): value is AnimationDefinition["easing"] {
+  return value === "linear" || value === "ease" || value === "ease-in" ||
+    value === "ease-out" || value === "ease-in-out";
 }
 
 function hasFiniteNumbers<K extends string>(

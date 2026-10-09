@@ -2,7 +2,8 @@
 
 ## Status
 
-Proposed roadmap. This document describes future work; it does not represent
+Implementation has begun with the Phase 1 project-schema foundation. This
+roadmap describes future work; runtime animation and editor controls are not
 shipped application behavior.
 
 ## Problem and proposed approach

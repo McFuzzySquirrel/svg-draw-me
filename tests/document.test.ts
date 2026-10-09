@@ -90,6 +90,20 @@ describe("stroke-preserving document", () => {
     );
   });
 
+  it("migrates version-one projects to the current schema", () => {
+    expect(deserializeProject(JSON.stringify({ version: 1, strokes: [] }))).toEqual({
+      version: 2,
+      width: 1200,
+      height: 800,
+      strokes: [],
+      shapes: [],
+      rasterReferences: [],
+      importedSvgs: [],
+      layers: [],
+      animations: [],
+    });
+  });
+
   it("rejects project files with invalid dimensions", () => {
     expect(() => deserializeProject(JSON.stringify({ version: 1, width: 0, height: 800, strokes: [] }))).toThrow(
       "Project dimensions must be positive",
@@ -185,5 +199,96 @@ describe("stroke-preserving document", () => {
     expect(projectToSvg(clearedShape)).toContain('fill="none"');
     expect(applyFill(filledShape, { type: "shape", id: shapeId }, "#00ff00")).toBe(filledShape);
     expect(applyFill(filledShape, { type: "shape", id: "missing" }, null)).toBe(filledShape);
+  });
+
+  it("round trips layers, transforms, and animation definitions", () => {
+    const project = appendStroke(
+      createProject(),
+      [
+        { x: 2, y: 3, pressure: 0.4, time: 10 },
+        { x: 4, y: 5, pressure: 0.8, time: 20 },
+      ],
+      { color: "#000000", width: 4, opacity: 1, lineCap: "round", lineJoin: "round" },
+      "pen",
+      10,
+      20,
+    );
+    const stroke = project.strokes[0]!;
+    stroke.layerId = "foreground";
+    stroke.transform = { translateX: 5, translateY: 8, rotation: 0.2, scaleX: 1.5, scaleY: 1 };
+    project.layers.push({
+      id: "foreground",
+      name: "Foreground",
+      order: 0,
+      visible: true,
+      opacity: 1,
+      parentId: null,
+    });
+    project.animations.push({
+      id: "animation-1",
+      preset: "fade",
+      targetType: "object",
+      targetId: stroke.id,
+      duration: 800,
+      delay: 100,
+      iterations: "infinite",
+      direction: "alternate",
+      easing: "ease-in-out",
+      enabled: true,
+    });
+
+    expect(deserializeProject(serializeProject(project))).toEqual(project);
+  });
+
+  it("rejects invalid animation values and unresolved targets", () => {
+    const baseProject = {
+      ...createProject(),
+      animations: [{
+        id: "animation-1",
+        preset: "fade",
+        targetType: "layer",
+        targetId: "missing",
+        duration: 800,
+        delay: 0,
+        iterations: 1,
+        direction: "normal",
+        easing: "linear",
+        enabled: true,
+      }],
+    };
+    expect(() => deserializeProject(JSON.stringify(baseProject))).toThrow("Invalid project animation target");
+
+    for (const invalid of [
+      { ...baseProject, layers: [{ id: "layer-1", name: "Layer", order: 0, visible: true, opacity: 1, parentId: null }] },
+      { ...baseProject, animations: [{ ...baseProject.animations[0], duration: 0 }] },
+      { ...baseProject, animations: [{ ...baseProject.animations[0], easing: "spring" }] },
+    ]) {
+      expect(() => deserializeProject(JSON.stringify(invalid))).toThrow("Invalid project animation");
+    }
+  });
+
+  it("rejects invalid transforms and cyclic layer groups", () => {
+    const project = createProject();
+    project.layers.push(
+      { id: "layer-1", name: "One", order: 0, visible: true, opacity: 1, parentId: "layer-2" },
+      { id: "layer-2", name: "Two", order: 1, visible: true, opacity: 1, parentId: "layer-1" },
+    );
+    expect(() => deserializeProject(serializeProject(project))).toThrow("Invalid project layer hierarchy");
+
+    project.layers = [];
+    project.strokes.push({
+      id: "stroke-1",
+      points: [
+        { x: 0, y: 0, pressure: 1, time: 0 },
+        { x: 1, y: 1, pressure: 1, time: 1 },
+      ],
+      style: { color: "#000000", width: 1, opacity: 1, lineCap: "round", lineJoin: "round" },
+      fill: null,
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      transform: { translateX: 0, translateY: 0, rotation: 0, scaleX: 0, scaleY: 1 },
+    });
+    expect(() => deserializeProject(serializeProject(project))).toThrow("Invalid project transform");
   });
 });

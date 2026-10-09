@@ -9,6 +9,20 @@ export function createProject(
   return { version: 1, width, height, strokes: [], shapes: [], rasterReferences: [], importedSvgs: [] };
 }
 
+export function dimensionsForBounds(
+  width: number,
+  height: number,
+  bounds: Iterable<{ x: number; y: number; width: number; height: number }>,
+): { width: number; height: number } {
+  let expandedWidth = width;
+  let expandedHeight = height;
+  for (const bound of bounds) {
+    expandedWidth = Math.max(expandedWidth, Math.ceil(bound.x + bound.width));
+    expandedHeight = Math.max(expandedHeight, Math.ceil(bound.y + bound.height));
+  }
+  return { width: expandedWidth, height: expandedHeight };
+}
+
 export function cloneProject(project: DrawingProject): DrawingProject {
   return structuredClone(project);
 }

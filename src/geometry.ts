@@ -101,6 +101,17 @@ export function pointHitsShape(point: { x: number; y: number }, shape: Shape, ra
   return false;
 }
 
+export function pointHitsReference(
+  point: { x: number; y: number },
+  reference: { x: number; y: number; width: number; height: number },
+  radius = 0,
+): boolean {
+  return point.x >= reference.x - radius
+    && point.x <= reference.x + reference.width + radius
+    && point.y >= reference.y - radius
+    && point.y <= reference.y + reference.height + radius;
+}
+
 export function pointInPolygon(point: { x: number; y: number }, points: Array<{ x: number; y: number }>): boolean {
   let inside = false;
   for (let index = 0, previous = points.length - 1; index < points.length; previous = index++) {

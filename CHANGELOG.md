@@ -16,6 +16,8 @@ All notable changes are documented here. This project follows Keep a Changelog c
 - Fill bucket for tolerant closed freehand loops.
 - Collapsible mobile toolbar menu.
 - Whole-object eraser with undo support.
+- Editable canvas dimensions and grid spacing; imported references automatically expand the canvas to fit.
+- Eraser support for imported reference images and SVGs, with undo.
 - Project-bound drawing and clipping, optional grid overlay, and a touch-friendly Pan tool.
 - Save and reopen local `.svgdraw` project files to continue editing.
 - Compact, accessible icon buttons for common toolbar actions.

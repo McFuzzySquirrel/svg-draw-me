@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { appendShape, appendStroke, applyFill, createProject, deserializeProject, serializeProject } from "../src/document";
+import { appendShape, appendStroke, applyFill, createProject, deserializeProject, dimensionsForBounds, serializeProject } from "../src/document";
 import { projectToEditableSvg, projectToSvg } from "../src/svg";
 
 describe("stroke-preserving document", () => {
+  it("expands project dimensions to include reference bounds", () => {
+    expect(dimensionsForBounds(1200, 800, [
+      { x: 0, y: 0, width: 1600, height: 900 },
+      { x: 1700, y: 100, width: 100, height: 200 },
+    ])).toEqual({ width: 1800, height: 900 });
+    expect(dimensionsForBounds(1200, 800, [{ x: 0, y: 0, width: 300, height: 200 }]))
+      .toEqual({ width: 1200, height: 800 });
+  });
+
   it("round trips a project without losing stroke metadata", () => {
     const project = appendStroke(
       createProject(),

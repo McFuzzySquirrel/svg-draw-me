@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { findFillTarget, isClosedStroke, pointHitsShape, pointHitsStroke, pointInStrokeLoop } from "../src/geometry";
+import { findFillTarget, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke, pointInStrokeLoop } from "../src/geometry";
 import { createProject } from "../src/document";
 
 describe("whole-object hit testing", () => {
+  it("hits reference bounds with an optional eraser tolerance", () => {
+    const reference = { x: 10, y: 20, width: 40, height: 30 };
+    expect(pointHitsReference({ x: 30, y: 35 }, reference)).toBe(true);
+    expect(pointHitsReference({ x: 9, y: 35 }, reference)).toBe(false);
+    expect(pointHitsReference({ x: 9, y: 35 }, reference, 1)).toBe(true);
+  });
+
   it("hits a stroke near one of its segments", () => {
     expect(pointHitsStroke(
       { x: 5, y: 2 },

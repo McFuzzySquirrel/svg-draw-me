@@ -123,10 +123,11 @@ viewportLayer.mask = viewportMask;
 const redraw = (): void => {
   gridLayer.clear();
   if (gridEnabled) {
-    for (let x = 0; x <= project.width; x += 50) {
+    const gridStep = Math.max(50, Math.ceil(Math.max(project.width, project.height) / 2000 / 50) * 50);
+    for (let x = 0; x <= project.width; x += gridStep) {
       gridLayer.moveTo(x, 0).lineTo(x, project.height).stroke({ color: x % 100 === 0 ? "#94a3b8" : "#cbd5e1", alpha: x % 100 === 0 ? 0.5 : 0.28, width: x % 100 === 0 ? 1.5 : 1 });
     }
-    for (let y = 0; y <= project.height; y += 50) {
+    for (let y = 0; y <= project.height; y += gridStep) {
       gridLayer.moveTo(0, y).lineTo(project.width, y).stroke({ color: y % 100 === 0 ? "#94a3b8" : "#cbd5e1", alpha: y % 100 === 0 ? 0.5 : 0.28, width: y % 100 === 0 ? 1.5 : 1 });
     }
   }
@@ -351,11 +352,12 @@ pixi.canvas.addEventListener("pointerdown", (event) => {
   pixi.canvas.setPointerCapture(event.pointerId);
   const point = viewportPoint(event);
   pointers.set(event.pointerId, { ...point, type: event.pointerType });
-  if (event.button === 1 || spacePressed || (event.pointerType === "touch" && activeTool === "pan")) {
+  if (event.button === 1 || spacePressed || (activeTool === "pan" && pointers.size < 2)) {
     panPointer = { id: event.pointerId, ...point };
     return;
   }
   if (event.pointerType === "touch" && pointers.size === 2) {
+    panPointer = null;
     activePointer = null;
     activePoints = [];
     const [first, second] = [...pointers.values()];
@@ -502,6 +504,44 @@ document.querySelector<HTMLButtonElement>("#clear")?.addEventListener("click", (
   redraw();
   setStatus("Canvas cleared.");
 });
+document.querySelector<HTMLButtonElement>("#grid-toggle")?.addEventListener("click", (event) => {
+  gridEnabled = !gridEnabled;
+  const button = event.currentTarget as HTMLButtonElement;
+  button.setAttribute("aria-pressed", String(gridEnabled));
+  button.setAttribute("aria-label", gridEnabled ? "Hide grid" : "Show grid");
+  button.title = gridEnabled ? "Hide grid" : "Show grid";
+  redraw();
+});
+document.querySelector<HTMLButtonElement>("#save-project")?.addEventListener("click", () => {
+  download("svg-draw-me-project.svgdraw", serializeProject(project), "application/json");
+  setStatus("Project saved. Reopen the .svgdraw file to continue editing.");
+});
+document.querySelector<HTMLButtonElement>("#load-project")?.addEventListener("click", () => {
+  document.querySelector<HTMLInputElement>("#project-file")?.click();
+});
+document.querySelector<HTMLInputElement>("#project-file")?.addEventListener("change", async (event) => {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    const loaded = deserializeProject(await file.text());
+    const loadedReferences = await createReferenceLayer(loaded);
+    referencesLayer.removeChildren().forEach((child) => child.destroy());
+    referencesLayer.addChild(...loadedReferences.removeChildren());
+    Object.assign(project, loaded);
+    history.length = 0;
+    zoom = 1;
+    panX = 0;
+    panY = 0;
+    viewportMask.clear().rect(0, 0, project.width, project.height).fill("#ffffff");
+    syncScale();
+    setStatus(`${file.name} opened. Continue editing your project.`);
+  } catch (error) {
+    setStatus(`Could not open ${file.name}: ${error instanceof Error ? error.message : "invalid project file"}`);
+  } finally {
+    input.value = "";
+  }
+});
 document.querySelector<HTMLButtonElement>("#zoom-in")?.addEventListener("click", () => {
   zoomAt(zoom * 1.25, { x: pixi.screen.width / 2, y: pixi.screen.height / 2 });
 });
@@ -542,6 +582,9 @@ document.querySelector<HTMLInputElement>("#raster")?.addEventListener("change", 
       visible: true,
     });
     const reference = new Sprite(texture);
+    reference.position.set(0, 0);
+    reference.width = image.width;
+    reference.height = image.height;
     reference.alpha = 0.35;
     referencesLayer.addChild(reference);
     setStatus(`${file.name} added as a tracing reference.`);
@@ -591,6 +634,38 @@ const syncScale = (): void => {
 };
 pixi.renderer.on("resize", syncScale);
 syncScale();
+
+async function createReferenceLayer(source: DrawingProject): Promise<Container> {
+  const layer = new Container();
+  for (const reference of source.rasterReferences) {
+    const texture = await Assets.load({ src: reference.dataUrl, parser: "texture" });
+    const sprite = new Sprite(texture);
+    sprite.position.set(reference.x, reference.y);
+    sprite.width = reference.width;
+    sprite.height = reference.height;
+    sprite.alpha = reference.opacity;
+    sprite.visible = reference.visible;
+    layer.addChild(sprite);
+  }
+  for (const reference of source.importedSvgs) {
+    const url = URL.createObjectURL(createSvgBlob(reference.markup));
+    try {
+      const context = await Assets.load({
+        src: url,
+        parser: "svg",
+        data: { parseAsGraphicsContext: true },
+      });
+      const imported = new Graphics(context);
+      imported.position.set(reference.x, reference.y);
+      imported.alpha = reference.opacity * 0.8;
+      imported.visible = reference.visible;
+      layer.addChild(imported);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  return layer;
+}
 
 function readFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

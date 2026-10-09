@@ -35,6 +35,8 @@ describe("stroke-preserving document", () => {
     const svg = projectToSvg(project);
     expect(svg).toContain('stroke="#ff0000"');
     expect(svg).toContain("M 0 0 L 10 10");
+    expect(svg).toContain('<clipPath id="project-bounds"><rect width="1200" height="800"/></clipPath>');
+    expect(svg).toContain('<g clip-path="url(#project-bounds)">');
   });
 
   it("exports a filled freehand loop as a closed SVG path", () => {
@@ -76,6 +78,12 @@ describe("stroke-preserving document", () => {
   it("rejects unsupported project versions", () => {
     expect(() => deserializeProject(JSON.stringify({ version: 99, strokes: [] }))).toThrow(
       "Unsupported or invalid project version",
+    );
+  });
+
+  it("rejects project files with invalid dimensions", () => {
+    expect(() => deserializeProject(JSON.stringify({ version: 1, width: 0, height: 800, strokes: [] }))).toThrow(
+      "Project dimensions must be positive",
     );
   });
 

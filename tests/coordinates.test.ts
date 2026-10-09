@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { viewportToProject, zoomTransformAtPoint } from "../src/coordinates";
+import { clampProjectPoint, viewportToProject, zoomTransformAtPoint } from "../src/coordinates";
 
 describe("canvas coordinate conversion", () => {
   it("removes the centered letterbox offset before applying scale", () => {
@@ -23,5 +23,10 @@ describe("canvas coordinate conversion", () => {
 
     expect(transform).toEqual({ scale: 2, offsetX: -100, offsetY: -50 });
     expect(viewportToProject(300, 150, { left: 0, top: 0 }, transform)).toEqual({ x: 200, y: 100 });
+  });
+
+  it("clamps drawing coordinates to the project bounds", () => {
+    expect(clampProjectPoint(-4, 810, 1200, 800)).toEqual({ x: 0, y: 800 });
+    expect(clampProjectPoint(450, 320, 1200, 800)).toEqual({ x: 450, y: 320 });
   });
 });

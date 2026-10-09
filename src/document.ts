@@ -24,10 +24,13 @@ export function deserializeProject(serialized: string): DrawingProject {
   if (candidate.version !== 1 || !Array.isArray(candidate.strokes)) {
     throw new Error("Unsupported or invalid project version.");
   }
+  const width = finiteOr(candidate.width, DEFAULT_PROJECT_SIZE.width);
+  const height = finiteOr(candidate.height, DEFAULT_PROJECT_SIZE.height);
+  if (width <= 0 || height <= 0) throw new Error("Project dimensions must be positive.");
   return {
     version: 1,
-    width: finiteOr(candidate.width, DEFAULT_PROJECT_SIZE.width),
-    height: finiteOr(candidate.height, DEFAULT_PROJECT_SIZE.height),
+    width,
+    height,
     strokes: candidate.strokes.map((stroke) => ({ ...stroke, fill: stroke.fill ?? null })),
     shapes: Array.isArray(candidate.shapes) ? candidate.shapes : [],
     rasterReferences: Array.isArray(candidate.rasterReferences) ? candidate.rasterReferences : [],

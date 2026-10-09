@@ -27,6 +27,9 @@ button, .file-button {
   background: #243653; color: white; cursor: pointer;
 }
 button:hover, .file-button:hover { background: #324a70; }
+button:has(svg) { display: inline-flex; align-items: center; justify-content: center; padding: 0.4rem; }
+button svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+button[aria-pressed="true"] { background: #45658f; border-color: #a9c9fa; }
 .file-button input { display: none; }
 #status { flex: 1 1 100%; margin: 0; color: #c6d1e4; font-size: 0.8rem; }
 .workspace { flex: 1; min-height: 0; padding: 1rem; display: flex; }
@@ -40,6 +43,8 @@ button:hover, .file-button:hover { background: #324a70; }
   .menu-toggle { display: inline-flex; }
   .controls.menu-collapsed { padding: 0.5rem; }
   .controls.menu-collapsed > .toolbar-controls { display: none; }
+  .menu-toggle { padding: 0.4rem; }
+  .menu-toggle svg { width: 1.25rem; height: 1.25rem; }
   .workspace { padding: 0.5rem; }
   .canvas-host { min-height: calc(100vh - 150px); }
   .brand { flex-basis: 100%; }

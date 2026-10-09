@@ -20,6 +20,10 @@ All notable changes are documented here. This project follows Keep a Changelog c
 - Save and reopen local `.svgdraw` project files to continue editing.
 - Compact, accessible icon buttons for common toolbar actions.
 
+### Fixed
+
+- Restored visible drawing while keeping artwork clipped to the project canvas.
+
 ## [0.1.0] - 2026-10-08
 
 ### Added

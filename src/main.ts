@@ -112,7 +112,7 @@ viewportLayer = new Container();
 referencesLayer = new Container();
 gridLayer = new Graphics();
 drawingLayer = new Graphics();
-viewportLayer.addChild(gridLayer, referencesLayer, drawingLayer);
+viewportLayer.addChild(referencesLayer, gridLayer, drawingLayer);
 pixi.stage.addChild(viewportLayer);
 viewportMask = new Graphics().rect(0, 0, project.width, project.height).fill("#ffffff");
 viewportMask.renderable = false;

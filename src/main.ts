@@ -116,7 +116,6 @@ viewportLayer.addChild(gridLayer, referencesLayer, drawingLayer);
 pixi.stage.addChild(viewportLayer);
 viewportMask = new Graphics().rect(0, 0, project.width, project.height).fill("#ffffff");
 viewportMask.renderable = false;
-pixi.stage.addChild(viewportMask);
 viewportLayer.mask = viewportMask;
 
 const redraw = (): void => {

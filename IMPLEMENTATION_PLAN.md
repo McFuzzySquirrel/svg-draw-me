@@ -106,6 +106,26 @@ with validation, PixiJS preview, and SVG export. Linear and radial gradients are
 available for new filled shapes, bounded blur effects are supported, and
 normalized SVG path-node editing for supported M/L/Q/C/Z commands is available.
 
+## Follow-up feature — Object selection and editing (complete)
+
+The Select tool now targets retained artwork, text, raster/SVG references, and
+named layers using stable IDs and project-space bounds. Click and marquee
+selection, additive selection, move/resize/rotate handles, horizontal and
+vertical flips, deletion, duplication, internal copy/cut/paste, grid snapping,
+keyboard movement, and a context menu are integrated with the existing undo
+snapshots. Selection state is transient; project transforms and object/layer
+relationships remain serializable and exports are unchanged.
+
+## Follow-up feature — Grouping and ungrouping (complete)
+
+Group and Ungroup reuse the validated `ProjectLayer` hierarchy rather than
+introducing a separate group schema. Objects, references, layers, and mixed
+selections can be grouped; reparenting preserves supported project-space
+transforms and stable animation targets. Ungrouping promotes children while
+preserving visible transforms and blocks when the group itself has an
+animation. Toolbar, context-menu, keyboard, undo, serialization, SVG export,
+and focused regression coverage are integrated.
+
 ## Phase 1 — Foundation and document model
 
 ### Scope

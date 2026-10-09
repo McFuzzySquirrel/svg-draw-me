@@ -97,6 +97,36 @@ editing aid and is not included in exports.
 
 Choose **Eraser**, then touch a stroke, shape, or reference image/SVG. The complete object or reference layer is removed and can be restored with **Undo**. The current eraser removes whole items rather than splitting a stroke into partial segments.
 
+### Select and edit objects
+
+Choose **Select** to work with existing artwork, text, imported references, or
+named layers. Click an object to select it, hold **Shift** to add or remove
+objects, or drag a marquee around the canvas to select every target that
+intersects the box. Selection is based on stable project objects rather than
+temporary Pixi display instances.
+
+Drag a selected object to move it. Drag the lower-right handle to resize the
+selection, or drag the handle above the selection to rotate it. Use the
+selection commands to flip horizontally or vertically, rotate by 90 degrees,
+or delete the selection. The arrow keys move by one project unit; **Shift**
+plus an arrow moves by a larger step. When the grid is visible, selection
+movement and resizing snap to the configured grid spacing.
+
+Use **Ctrl/Cmd+C**, **Ctrl/Cmd+X**, **Ctrl/Cmd+V**, and **Ctrl/Cmd+D** to copy,
+cut, paste, or duplicate selected objects. Clipboard data is kept inside the
+application and pasted objects receive new IDs. Right-click the canvas for the
+same selection actions through a context menu. Selection edits are undoable as
+single actions and preserve layer assignments and valid animation targets.
+
+Use **Group** or press **Ctrl/Cmd+G** to place selected objects, references,
+layers, or a mixed selection inside a new named layer. Groups behave like
+ordinary layers, so they can be renamed, reordered, hidden, transformed, and
+saved with the project. Use **Ungroup** or **Ctrl/Cmd+Shift+G** to promote a
+selected group’s children back to its parent while preserving their visible
+position and transforms. A group with an animation targeting the group itself
+must have that animation removed before it can be ungrouped; animations on
+child objects remain attached to those objects.
+
 ### Zoom and pan
 
 - Use `+`, `−`, or **Reset zoom**.

@@ -1,6 +1,6 @@
 import { Application, Assets, Container, Graphics, Sprite } from "pixi.js";
-import { viewportToProject, zoomTransformAtPoint } from "./coordinates";
-import { appendShape, appendStroke, applyFill, cloneProject, createProject } from "./document";
+import { clampProjectPoint, viewportToProject, zoomTransformAtPoint } from "./coordinates";
+import { appendShape, appendStroke, applyFill, cloneProject, createProject, deserializeProject, serializeProject } from "./document";
 import { createSvgBlob } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
 import { findFillTarget, isClosedStroke, pointHitsShape, pointHitsStroke } from "./geometry";
@@ -19,7 +19,7 @@ let currentStyle: StrokeStyle = {
   lineCap: "round",
   lineJoin: "round",
 };
-let activeTool: "pen" | "eraser" | "fill" | ShapeKind = "pen";
+let activeTool: "pen" | "eraser" | "fill" | "pan" | ShapeKind = "pen";
 let fillEnabled = false;
 let fillColor = "#93c5fd";
 let fillMode: "color" | "none" = "color";
@@ -28,6 +28,9 @@ let activePointer: { id: number; type: PointerKind; startedAt: number } | null =
 let drawingLayer: Graphics;
 let referencesLayer: Container;
 let viewportLayer: Container;
+let gridLayer: Graphics;
+let viewportMask: Graphics;
+let gridEnabled = false;
 let canvasScale = 1;
 let canvasOffsetX = 0;
 let canvasOffsetY = 0;
@@ -38,17 +41,17 @@ let panY = 0;
 let spacePressed = false;
 let panPointer: { id: number; x: number; y: number } | null = null;
 const pointers = new Map<number, { x: number; y: number; type: string }>();
-let pinchStart: { distance: number; zoom: number; x: number; y: number } | null = null;
+let pinchStart: { distance: number; zoom: number; x: number; y: number; panX: number; panY: number } | null = null;
 
 const controls = document.createElement("section");
 controls.className = "controls";
 controls.innerHTML = `
-  <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="true" aria-controls="drawing-controls">Menu</button>
+  <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="true" aria-controls="drawing-controls" aria-label="Hide menu" title="Hide menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <span id="drawing-controls" class="toolbar-controls">
   <div class="brand"><strong>SVG Draw Me</strong><span>stroke-preserving sketchbook</span></div>
   <label>Color <input id="color" type="color" value="${currentStyle.color}"></label>
   <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
-  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
+  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
   <span class="control-group" aria-label="Shape fill controls">
     <label for="fill-enabled"><input id="fill-enabled" type="checkbox"> Fill shape</label>
     <label for="fill-color">Fill color <input id="fill-color" type="color" value="${fillColor}"></label>
@@ -58,20 +61,23 @@ controls.innerHTML = `
         <option value="none">No fill</option>
       </select>
     </label>
-    <button id="clear-fill" type="button">Clear fill</button>
+    <button id="clear-fill" type="button" aria-label="Clear fill" title="Clear fill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.5 13.5 7l5.5 5.5-10.5 10.5H3zM14 6l2-2 5.5 5.5-2 2"/></svg></button>
   </span>
-  <button id="undo" type="button">Undo</button>
-  <button id="clear" type="button">Clear</button>
+  <button id="undo" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
+  <button id="clear" type="button" aria-label="Clear canvas" title="Clear canvas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
+  <button id="grid-toggle" type="button" aria-pressed="false" aria-label="Show grid" title="Show grid"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16"/></svg></button>
   <span class="zoom-controls" aria-label="Zoom controls">
-    <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
     <output id="zoom-value">100%</output>
-    <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
-    <button id="zoom-reset" type="button">Reset zoom</button>
+    <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14"/></svg></button>
+    <button id="zoom-reset" type="button" aria-label="Reset zoom" title="Reset zoom"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9a8 8 0 1 1 1 8M4 4v5h5"/></svg></button>
   </span>
   <label class="file-button">Reference image<input id="raster" type="file" accept="image/png,image/jpeg"></label>
   <label class="file-button">Import SVG<input id="svg" type="file" accept="image/svg+xml,.svg"></label>
-  <button id="export-svg" type="button">Download SVG</button>
-  <button id="export-editable" type="button">Download editable</button>
+  <button id="load-project" class="file-button" type="button">Open project</button><input id="project-file" type="file" accept="application/json,.json,.svgdraw" hidden>
+  <button id="save-project" type="button" aria-label="Save project" title="Save project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3zM7 3v6h10V3M7 21v-8h10v8"/></svg></button>
+  <button id="export-svg" type="button" aria-label="Download SVG" title="Download SVG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg></button>
+  <button id="export-editable" type="button" aria-label="Download editable SVG" title="Download editable SVG"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4M7 3h10"/></svg></button>
   <p id="status" role="status">Draw with a mouse, finger, or stylus.</p>
   </span>
 `;
@@ -82,6 +88,8 @@ const setMenuOpen = (open: boolean): void => {
   controls.classList.toggle("menu-collapsed", !open);
   menuToggle?.setAttribute("aria-expanded", String(open));
   if (menuToggle) menuToggle.textContent = open ? "Hide menu" : "Menu";
+  menuToggle?.setAttribute("aria-label", open ? "Hide menu" : "Show menu");
+  menuToggle?.setAttribute("title", open ? "Hide menu" : "Show menu");
   toolbarControls?.setAttribute("aria-hidden", String(!open));
 };
 setMenuOpen(!window.matchMedia("(max-width: 640px)").matches);
@@ -103,11 +111,25 @@ pixi.stage.eventMode = "static";
 pixi.stage.hitArea = pixi.screen;
 viewportLayer = new Container();
 referencesLayer = new Container();
+gridLayer = new Graphics();
 drawingLayer = new Graphics();
-viewportLayer.addChild(referencesLayer, drawingLayer);
+viewportLayer.addChild(gridLayer, referencesLayer, drawingLayer);
 pixi.stage.addChild(viewportLayer);
+viewportMask = new Graphics().rect(0, 0, project.width, project.height).fill("#ffffff");
+viewportMask.renderable = false;
+pixi.stage.addChild(viewportMask);
+viewportLayer.mask = viewportMask;
 
 const redraw = (): void => {
+  gridLayer.clear();
+  if (gridEnabled) {
+    for (let x = 0; x <= project.width; x += 50) {
+      gridLayer.moveTo(x, 0).lineTo(x, project.height).stroke({ color: x % 100 === 0 ? "#94a3b8" : "#cbd5e1", alpha: x % 100 === 0 ? 0.5 : 0.28, width: x % 100 === 0 ? 1.5 : 1 });
+    }
+    for (let y = 0; y <= project.height; y += 50) {
+      gridLayer.moveTo(0, y).lineTo(project.width, y).stroke({ color: y % 100 === 0 ? "#94a3b8" : "#cbd5e1", alpha: y % 100 === 0 ? 0.5 : 0.28, width: y % 100 === 0 ? 1.5 : 1 });
+    }
+  }
   drawingLayer.clear();
   for (const stroke of project.strokes) drawRecordedStroke(stroke);
   for (const shape of project.shapes) drawShape(shape);
@@ -251,9 +273,10 @@ const toProjectPoint = (event: PointerEvent): StrokePoint => {
     offsetX: canvasOffsetX,
     offsetY: canvasOffsetY,
   });
+  const boundedPoint = clampProjectPoint(point.x, point.y, project.width, project.height);
   return {
-    x: point.x,
-    y: point.y,
+    x: boundedPoint.x,
+    y: boundedPoint.y,
     pressure: event.pressure || (event.pointerType === "mouse" ? 0.5 : 1),
     time: performance.now(),
   };
@@ -263,7 +286,7 @@ const pointerKind = (event: PointerEvent): PointerKind =>
   event.pointerType === "pen" ? "pen" : event.pointerType === "touch" ? "touch" : "mouse";
 
 const isShapeTool = (tool: typeof activeTool): tool is ShapeKind =>
-  tool !== "pen" && tool !== "eraser" && tool !== "fill";
+  tool !== "pen" && tool !== "eraser" && tool !== "fill" && tool !== "pan";
 
 const viewportPoint = (event: PointerEvent): { x: number; y: number } => {
   const rect = pixi.canvas.getBoundingClientRect();
@@ -278,19 +301,15 @@ const syncViewport = (): void => {
   canvasOffsetY = centeredY + panY;
   viewportLayer.position.set(canvasOffsetX, canvasOffsetY);
   viewportLayer.scale.set(canvasScale);
+  viewportMask.position.set(canvasOffsetX, canvasOffsetY);
+  viewportMask.scale.set(canvasScale);
   const value = document.querySelector<HTMLOutputElement>("#zoom-value");
   if (value) value.value = `${Math.round(zoom * 100)}%`;
   redraw();
 };
 
-const zoomAt = (nextZoom: number, point: { x: number; y: number }): void => {
+const zoomAtProjectPoint = (nextZoom: number, projectPoint: { x: number; y: number }, point: { x: number; y: number }): void => {
   const boundedZoom = Math.max(0.25, Math.min(8, nextZoom));
-  const projectPoint = viewportToProject(
-    point.x,
-    point.y,
-    { left: 0, top: 0 },
-    { scale: canvasScale, offsetX: canvasOffsetX, offsetY: canvasOffsetY },
-  );
   const nextScale = fitScale * boundedZoom;
   const nextTransform = zoomTransformAtPoint(
     { scale: canvasScale, offsetX: canvasOffsetX, offsetY: canvasOffsetY },
@@ -302,6 +321,16 @@ const zoomAt = (nextZoom: number, point: { x: number; y: number }): void => {
   panX = nextTransform.offsetX - (pixi.screen.width - project.width * nextScale) / 2;
   panY = nextTransform.offsetY - (pixi.screen.height - project.height * nextScale) / 2;
   syncViewport();
+};
+
+const zoomAt = (nextZoom: number, point: { x: number; y: number }): void => {
+  const projectPoint = viewportToProject(
+    point.x,
+    point.y,
+    { left: 0, top: 0 },
+    { scale: canvasScale, offsetX: canvasOffsetX, offsetY: canvasOffsetY },
+  );
+  zoomAtProjectPoint(nextZoom, projectPoint, point);
 };
 
 const distanceBetween = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
@@ -322,7 +351,7 @@ pixi.canvas.addEventListener("pointerdown", (event) => {
   pixi.canvas.setPointerCapture(event.pointerId);
   const point = viewportPoint(event);
   pointers.set(event.pointerId, { ...point, type: event.pointerType });
-  if (event.button === 1 || spacePressed) {
+  if (event.button === 1 || spacePressed || (event.pointerType === "touch" && activeTool === "pan")) {
     panPointer = { id: event.pointerId, ...point };
     return;
   }
@@ -335,6 +364,8 @@ pixi.canvas.addEventListener("pointerdown", (event) => {
       zoom,
       x: (first.x + second.x) / 2,
       y: (first.y + second.y) / 2,
+      panX,
+      panY,
     };
     return;
   }
@@ -363,7 +394,15 @@ pixi.canvas.addEventListener("pointermove", (event) => {
     const [first, second] = [...pointers.values()];
     const distance = distanceBetween(first, second);
     const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
-    zoomAt(pinchStart.zoom * (distance / pinchStart.distance), midpoint);
+    const startScale = fitScale * pinchStart.zoom;
+    const startOffsetX = (pixi.screen.width - project.width * startScale) / 2 + pinchStart.panX;
+    const startOffsetY = (pixi.screen.height - project.height * startScale) / 2 + pinchStart.panY;
+    const projectPoint = viewportToProject(pinchStart.x, pinchStart.y, { left: 0, top: 0 }, {
+      scale: startScale,
+      offsetX: startOffsetX,
+      offsetY: startOffsetY,
+    });
+    zoomAtProjectPoint(pinchStart.zoom * (distance / pinchStart.distance), projectPoint, midpoint);
     return;
   }
   if (!activePointer || activePointer.id !== event.pointerId) return;

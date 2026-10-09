@@ -4,6 +4,18 @@ export interface CanvasTransform {
   offsetY: number;
 }
 
+export function clampProjectPoint(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  return {
+    x: Math.max(0, Math.min(width, x)),
+    y: Math.max(0, Math.min(height, y)),
+  };
+}
+
 export function projectToViewport(
   x: number,
   y: number,

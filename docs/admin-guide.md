@@ -45,6 +45,8 @@ The Pages workflow runs on pushes to `main` and can be started manually from the
 3. Build the static site with `npm run build`.
 4. Upload `dist/` and deploy it with the GitHub Pages deployment action.
 
+The workflow uses `actions/upload-pages-artifact@v4` (backed by `actions/upload-artifact@v4`) with `actions/deploy-pages@v5`. This keeps uploads on the older artifact protocol after a deployment using `upload-pages-artifact@v5` reported no `github-pages` artifact despite a successful upload. When upgrading these actions, verify artifact discovery and deployment in Actions; a successful build and upload alone do not validate the pair.
+
 The repository Pages URL is `https://mcfuzzysquirrel.github.io/svg-draw-me/`. If the deployment fails, inspect the failed Actions step, correct the source issue, and rerun the workflow. No application data is stored by the deployment.
 
 If these values are changed, update the user guide and README configuration tables.

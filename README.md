@@ -31,7 +31,7 @@ The application currently runs entirely in the browser. Projects are held in mem
 | Stroke-preserving drawing | Records separate ordered strokes and their point metadata instead of flattening directly to pixels. |
 | Shape tools | Creates first-class lines, rectangles, ellipses, polygons, and curved lines with optional fills. |
 | Fill bucket | Fills or clears tolerant closed hand-drawn loops and existing fillable shapes without flattening their geometry or stroke history. |
-| Mobile menu | Collapses the toolbar to maximize drawing space on narrow screens. |
+| Category command menu | Groups drawing, canvas, files, animation, layers, and path commands behind compact accessible icons and anchored popups to maximize drawing space. |
 | Bounded workspace | Clips drawing and reference layers to an editable project canvas; importing a larger reference expands the canvas to contain it. |
 | Whole-object eraser | Removes a complete touched stroke, shape, or reference layer and supports undo. |
 | Pointer input | Supports mouse, touch, and pen/stylus pointer events. |

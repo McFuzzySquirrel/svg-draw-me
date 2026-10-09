@@ -63,11 +63,35 @@ Set **Canvas width** and **Canvas height** in the toolbar to resize the project.
 
 Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose **Fill bucket**, choose a **Fill color**, and tap inside the loop. The bucket accepts a small endpoint gap, keeps the original stroke points and metadata, and can be undone. Tap inside an existing filled loop or a filled rectangle, ellipse, or polygon to replace its fill. Choose **No fill** or **Clear fill** before tapping to remove an existing fill. Lines, curved lines, open loops, and clicks outside a fillable object are not filled.
 
-### Mobile menu
+### Command menu
 
-On a narrow screen, use **Menu** to show the controls and **Hide menu** to collapse them and give the canvas more space. The drawing remains unchanged when the menu is collapsed.
+The toolbar uses compact category icons to leave more space for drawing. Choose
+**Draw**, **Canvas**, **Files**, **Animation**, **Layers**, or **Paths** to open
+the relevant commands in an anchored popup. Drawing, canvas, import/export,
+animation, layer, and path-editing actions retain their existing behavior.
+Larger popups use labeled subgroups: Draw separates brush/tools, text, and
+fill/effects; Canvas separates dimensions, grid, and history/zoom; and Files
+separates references, project files, and exports.
 
-Toolbar actions use compact icons; focus or hover an icon button to see its label. Use **Show grid**/**Hide grid** to toggle the alignment grid, and set **Grid size** to change its spacing (50 units by default). The grid covers the canvas, overlays reference images, and artwork appears above both. The grid is only an editing aid and is not included in exports.
+The Draw popup keeps its core color, width, and tool controls visible, then
+shows only the settings relevant to the selected tool. Text content, size, and
+font appear for **Text**; shape fill, gradient, and blur appear for
+**Rectangle**, **Ellipse**, **Polygon**, and **Curved line**; and bucket color,
+bucket action, and clear-fill appear for **Fill bucket**. **Pen**, **Pan**,
+**Eraser**, **Line**, and **Path** do not show unrelated settings.
+
+Only one popup is open at a time. Choose the active category again, click
+outside a popup, or press **Escape** to close it. Keyboard focus moves into an
+opened popup and returns to its category icon when Escape closes it. Focus and
+hover labels identify every category icon and command.
+
+Use **Show grid**/**Hide grid** to toggle the alignment grid, and set **Grid
+size** to change its spacing (50 units by default). The grid covers the canvas,
+overlays reference images, and artwork appears above both. The grid is only an
+editing aid and is not included in exports.
+
+**Undo** is available as a dedicated command-bar icon for quick access.
+**Clear** remains in the Canvas popup.
 
 ### Erase
 
@@ -160,9 +184,13 @@ PNG/JPG and SVG files are read locally through browser file APIs. Raster data is
 
 ## Accessibility and Mobile Use
 
-Toolbar actions are native HTML buttons and file inputs. The canvas has an accessible label and a status region. Touch drawing uses `touch-action: none` on the canvas host so drawing and pinch navigation can work without page scrolling over the workspace.
+Toolbar actions are native HTML buttons and file inputs grouped behind
+accessible category buttons. The canvas has an accessible label and a status
+region. Touch drawing uses `touch-action: none` on the canvas host so drawing
+and pinch navigation can work without page scrolling over the workspace.
 
-Keyboard focus and screen-reader coverage for the canvas drawing surface is limited; use the HTML controls for commands.
+Keyboard focus and screen-reader coverage for the canvas drawing surface is
+limited; use the HTML command popups for commands.
 
 ## Privacy and Data Handling
 

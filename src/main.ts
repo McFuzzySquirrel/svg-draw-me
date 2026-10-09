@@ -203,17 +203,171 @@ controls.querySelector<HTMLInputElement>("#fill-color")!.value = fillColor;
 controls.querySelector<HTMLInputElement>("#gradient-end")!.value = gradientEndColor;
 controls.querySelector<HTMLInputElement>("#blur-strength")!.value = String(blurStrength);
 appRoot.append(controls);
-const menuToggle = controls.querySelector<HTMLButtonElement>("#menu-toggle");
 const toolbarControls = controls.querySelector<HTMLSpanElement>("#drawing-controls");
-const setMenuOpen = (open: boolean): void => {
-  controls.classList.toggle("menu-collapsed", !open);
-  menuToggle?.setAttribute("aria-expanded", String(open));
-  menuToggle?.setAttribute("aria-label", open ? "Hide menu" : "Show menu");
-  menuToggle?.setAttribute("title", open ? "Hide menu" : "Show menu");
-  toolbarControls?.setAttribute("aria-hidden", String(!open));
+const menuToggle = controls.querySelector<HTMLButtonElement>("#menu-toggle");
+menuToggle?.remove();
+if (!toolbarControls) throw new Error("Toolbar controls are missing.");
+
+const commandBar = document.createElement("nav");
+commandBar.className = "command-bar";
+commandBar.setAttribute("aria-label", "Drawing commands");
+const categoryIcons: Record<string, string> = {
+  Draw: '<path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20ZM13.5 7.5l3 3"/>',
+  Canvas: '<path d="M4 4h16v16H4zM4 10h16M4 16h16M10 4v16M16 4v16"/>',
+  Files: '<path d="M4 5h6l2 2h8v12H4zM8 12h8m-4-3v6"/>',
+  Animation: '<path d="M8 5v14l11-7zM4 5v14"/>',
+  Layers: '<path d="m4 7 8-4 8 4-8 4-8-4Zm0 5 8 4 8-4M4 17l8 4 8-4"/>',
+  Paths: '<path d="M4 18c4-8 6-8 10-4s5 3 6-8M4 18h.01M14 14h.01M20 6h.01"/>',
 };
-setMenuOpen(!window.matchMedia("(max-width: 640px)").matches);
-menuToggle?.addEventListener("click", () => setMenuOpen(controls.classList.contains("menu-collapsed")));
+const categoryGroups: Record<string, Array<{ title: string; selectors: string[] }>> = {
+  Draw: [
+    { title: "Brush and tool", selectors: ["#color", "#width", "#tool"] },
+    { title: "Text", selectors: ["#text-content", "#text-size", "#text-font"] },
+    { title: "Fill and effects", selectors: [".control-group"] },
+  ],
+  Canvas: [
+    { title: "Canvas", selectors: ["#canvas-width", "#canvas-height"] },
+    { title: "Grid", selectors: ["#grid-size", "#grid-toggle"] },
+    { title: "History and zoom", selectors: ["#clear", ".zoom-controls"] },
+  ],
+  Files: [
+    { title: "References", selectors: [".file-button"] },
+    { title: "Project", selectors: ["#load-project", "#project-file", "#save-project"] },
+    { title: "Exports", selectors: ["#export-svg", "#export-editable"] },
+  ],
+  Animation: [{ title: "Animation", selectors: [".animation-panel"] }],
+  Layers: [{ title: "Layers", selectors: [".layers-panel"] }],
+  Paths: [{ title: "Path editing", selectors: [".path-editor-panel"] }],
+};
+const moveControl = (selector: string, popup: HTMLElement): void => {
+  for (const element of Array.from(toolbarControls.querySelectorAll<HTMLElement>(selector))) {
+    const control = element.matches("label, span, button, details, input") ? element : element.parentElement;
+    if (!control) continue;
+    if (control instanceof HTMLDetailsElement) {
+      control.open = true;
+      control.classList.add("advanced-panel");
+    }
+    popup.append(control);
+  }
+};
+const addSubgroup = (popup: HTMLElement, title: string, selectors: string[]): void => {
+  const subgroup = document.createElement("section");
+  subgroup.className = "popup-subgroup";
+  subgroup.dataset.commandGroup = title.toLowerCase().replace(/\s+/g, "-");
+  const heading = document.createElement("h2");
+  heading.textContent = title;
+  subgroup.append(heading);
+  selectors.forEach((selector) => moveControl(selector, subgroup));
+  if (subgroup.childElementCount > 1) popup.append(subgroup);
+};
+const moveAction = (selector: string): void => {
+  const action = toolbarControls.querySelector<HTMLButtonElement>(selector);
+  if (!action) return;
+  action.classList.add("command-action");
+  commandBar.append(action);
+};
+const commandButtons: HTMLButtonElement[] = [];
+for (const [label, groups] of Object.entries(categoryGroups)) {
+  const group = document.createElement("div");
+  group.className = "command-group";
+  const button = document.createElement("button");
+  button.className = "command-button";
+  button.type = "button";
+  button.setAttribute("aria-label", `${label} commands`);
+  button.title = `${label} commands`;
+  const popupId = `${label.toLowerCase()}-popup`;
+  button.setAttribute("aria-controls", popupId);
+  button.setAttribute("aria-expanded", "false");
+  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${categoryIcons[label]}</svg><span>${label}</span>`;
+  const popup = document.createElement("div");
+  popup.id = popupId;
+  popup.className = `command-popup${["Animation", "Layers", "Paths"].includes(label) ? " command-popup-wide" : ""}`;
+  popup.hidden = true;
+  groups.forEach(({ title, selectors }) => addSubgroup(popup, title, selectors));
+  group.append(button, popup);
+  commandBar.append(group);
+  commandButtons.push(button);
+  if (label === "Draw") moveAction("#undo");
+}
+const status = toolbarControls.querySelector("#status");
+toolbarControls.replaceChildren(commandBar);
+if (status) toolbarControls.append(status);
+
+const setControlVisibility = (element: HTMLElement | null, visible: boolean): void => {
+  if (!element) return;
+  element.hidden = !visible;
+  element.setAttribute("aria-hidden", String(!visible));
+};
+const syncDrawControls = (): void => {
+  const tool = controls.querySelector<HTMLSelectElement>("#tool")?.value ?? activeTool;
+  const textGroup = controls.querySelector<HTMLElement>("#draw-popup [data-command-group='text']");
+  const fillGroup = controls.querySelector<HTMLElement>("#draw-popup [data-command-group='fill-and-effects']");
+  const textVisible = tool === "text";
+  const shapeVisible = ["rectangle", "ellipse", "polygon", "curve"].includes(tool);
+  const bucketVisible = tool === "fill";
+  setControlVisibility(textGroup, textVisible);
+  setControlVisibility(fillGroup, shapeVisible || bucketVisible);
+  const fillContainer = fillGroup?.querySelector<HTMLElement>(".control-group");
+  if (!fillGroup || !fillContainer) return;
+  const shapeControls = ["#fill-enabled", "#gradient-fill", "#gradient-type", "#gradient-end", "#blur-effect", "#blur-strength"];
+  const bucketControls = ["#fill-color", "#fill-mode", "#clear-fill"];
+  shapeControls.forEach((selector) => setControlVisibility(fillContainer.querySelector<HTMLElement>(selector)?.parentElement ?? null, shapeVisible));
+  bucketControls.forEach((selector) => {
+    const element = fillContainer.querySelector<HTMLElement>(selector);
+    setControlVisibility(element?.matches("button") ? element : element?.parentElement ?? null, bucketVisible);
+  });
+  const heading = fillGroup.querySelector("h2");
+  if (heading) heading.textContent = shapeVisible ? "Fill and effects" : "Bucket fill";
+};
+syncDrawControls();
+
+let openPopup: { button: HTMLButtonElement; popup: HTMLElement } | null = null;
+const positionPopup = (button: HTMLButtonElement, popup: HTMLElement): void => {
+  const buttonRect = button.getBoundingClientRect();
+  const popupRect = popup.getBoundingClientRect();
+  const gutter = 8;
+  const left = Math.max(gutter, Math.min(buttonRect.left, window.innerWidth - popupRect.width - gutter));
+  const top = Math.min(buttonRect.bottom + gutter, window.innerHeight - popupRect.height - gutter);
+  popup.style.left = `${left}px`;
+  popup.style.top = `${Math.max(gutter, top)}px`;
+};
+const closePopup = (restoreFocus = false): void => {
+  if (!openPopup) return;
+  const { button, popup } = openPopup;
+  popup.hidden = true;
+  button.setAttribute("aria-expanded", "false");
+  openPopup = null;
+  if (restoreFocus) button.focus();
+};
+const openCommandPopup = (button: HTMLButtonElement): void => {
+  const popupId = button.getAttribute("aria-controls");
+  const popup = popupId ? controls.querySelector<HTMLElement>(`#${popupId}`) : null;
+  if (!popup) return;
+  if (openPopup?.button === button) {
+    closePopup();
+    return;
+  }
+  closePopup();
+  popup.hidden = false;
+  button.setAttribute("aria-expanded", "true");
+  openPopup = { button, popup };
+  positionPopup(button, popup);
+  popup.querySelector<HTMLElement>("input, select, button, summary")?.focus();
+};
+commandButtons.forEach((button) => button.addEventListener("click", () => openCommandPopup(button)));
+document.addEventListener("pointerdown", (event) => {
+  if (!openPopup || !(event.target instanceof Node)) return;
+  if (!openPopup.popup.contains(event.target) && !openPopup.button.contains(event.target)) closePopup();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && openPopup) {
+    event.preventDefault();
+    closePopup(true);
+  }
+});
+window.addEventListener("resize", () => {
+  if (openPopup) positionPopup(openPopup.button, openPopup.popup);
+});
 
 const syncAnimationTargetOptions = (): void => {
   const select = controls.querySelector<HTMLSelectElement>("#animation-target");
@@ -1186,6 +1340,7 @@ document.querySelector<HTMLInputElement>("#color")?.addEventListener("input", (e
 });
 document.querySelector<HTMLSelectElement>("#tool")?.addEventListener("change", (event) => {
   activeTool = (event.target as HTMLSelectElement).value as typeof activeTool;
+  syncDrawControls();
   setStatus(`${activeTool} tool selected.`);
 });
 document.querySelector<HTMLInputElement>("#fill-enabled")?.addEventListener("change", (event) => {

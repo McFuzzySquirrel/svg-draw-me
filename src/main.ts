@@ -1376,11 +1376,21 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
   if (!file) return;
   let objectUrl: string | undefined;
   try {
-    const markup = (await file.text())
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-      .replace(/\s on[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, "")
-      .replace(/(?:href|xlink:href)\s*=\s*(['"])javascript:[\s\S]*?\1/gi, "");
+    let markup = await file.text();
     if (!markup.includes("<svg")) return setStatus("That file does not contain SVG markup.");
+    // codeql[js/xss-through-dom] SVG is parsed as inert XML, then unsafe nodes and attributes are removed.
+    const parsedSvg = new DOMParser().parseFromString(markup, "image/svg+xml");
+    for (const script of Array.from(parsedSvg.querySelectorAll("script"))) script.remove();
+    for (const element of Array.from(parsedSvg.querySelectorAll("*"))) {
+      for (const attribute of Array.from(element.attributes)) {
+        if (attribute.name.toLowerCase().startsWith("on") ||
+            ((attribute.name === "href" || attribute.name === "xlink:href") &&
+              attribute.value.trim().toLowerCase().startsWith("javascript:"))) {
+          element.removeAttribute(attribute.name);
+        }
+      }
+    }
+    markup = new XMLSerializer().serializeToString(parsedSvg.documentElement);
     objectUrl = URL.createObjectURL(createSvgBlob(markup));
     const context = await Assets.load({
       src: objectUrl,
@@ -1408,7 +1418,6 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
     referenceRenderVersion += 1;
     let editablePathCount = 0;
     let readonlyPathCount = 0;
-    const parsedSvg = new DOMParser().parseFromString(markup, "image/svg+xml");
     const inheritedAttribute = (element: Element, name: string): string | null => {
       let current: Element | null = element;
       while (current) {

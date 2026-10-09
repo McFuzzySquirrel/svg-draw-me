@@ -46,7 +46,7 @@ Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose 
 
 On a narrow screen, use **Menu** to show the controls and **Hide menu** to collapse them and give the canvas more space. The drawing remains unchanged when the menu is collapsed.
 
-Toolbar actions use compact icons; focus or hover an icon button to see its label. Use **Show grid**/**Hide grid** to toggle a 50-unit alignment grid. The grid is only an editing aid and is not included in exports.
+Toolbar actions use compact icons; focus or hover an icon button to see its label. Use **Show grid**/**Hide grid** to toggle a 50-unit alignment grid. The grid overlays reference images, and artwork appears above both. The grid is only an editing aid and is not included in exports.
 
 ### Erase
 

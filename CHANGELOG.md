@@ -22,6 +22,7 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 ### Fixed
 
+- Kept artwork and the grid visible above imported reference images.
 - Restored visible drawing while keeping artwork clipped to the project canvas.
 
 ## [0.1.0] - 2026-10-08

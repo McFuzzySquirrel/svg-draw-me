@@ -65,7 +65,7 @@ targets, timing, direction, looping, reset, and reduced-motion behavior. Full
 layer editing controls are now available, and text objects have been added
 with validation, PixiJS preview, and SVG export. Linear and radial gradients are now
 available for new filled shapes, bounded blur effects are supported, and
-curved-path point editing is available.
+normalized SVG path-node editing for supported M/L/Q/C/Z commands is available.
 
 ## Phase 1 — Foundation and document model
 

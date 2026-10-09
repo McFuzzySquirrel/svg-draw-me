@@ -47,7 +47,7 @@ The application currently runs entirely in the browser. Projects are held in mem
 | Text objects | Adds editable text objects with font size, family, color, alignment, transforms, and SVG export. |
 | Gradients | Applies two-color linear or radial fills to new filled shapes and preserves them in SVG export. |
 | Constrained effects | Applies bounded blur effects to new filled shapes and preserves them in SVG export. |
-| Curved path editing | Selects recorded curved paths and edits their endpoints and control point. |
+| SVG path editing | Edits authored and imported M/L/Q/C/Z paths with an accessible numeric node panel; unsupported commands remain read-only. |
 | Project save and reopen | Saves the complete editable project, including reference layers, as a local `.svgdraw` file. |
 | Undo and clear | Removes the last completed stroke or clears user strokes. |
 
@@ -161,7 +161,7 @@ The following are planned or known gaps, not shipped features:
 
 - Layer management for visibility, opacity, positioning, and deletion.
 - Object-layer assignment and richer animation target management.
-- Broader effect and path-editing surfaces beyond the supported blur and curved-path subset.
+- Elliptical arcs and other SVG path commands beyond the supported M/L/Q/C/Z subset.
 - More advanced stroke smoothing and pressure-based width rendering.
 - Browser-level interaction tests.
 - More complete handling or fallback behavior for SVG filters, masks, CSS, and external assets.

@@ -46,8 +46,12 @@ the family is unavailable in the browser or SVG consumer. Text-to-path
 conversion is not performed, so exact glyph outlines depend on installed fonts.
 
 Enable **Blur effect** for a constrained blur filter on new non-line shapes.
-Use **Edit paths** to select and update the coordinates of recorded curved
-paths without editing project JSON directly.
+Use **Path** to create a vector path from pointer points. Use **Edit paths** to
+select an authored or imported editable path, choose a node, and update its
+command and numeric coordinates without editing project JSON directly.
+Move/line, quadratic, and cubic commands are supported. Paths containing
+elliptical arcs or malformed data remain in the imported reference and are
+reported as read-only.
 
 Choose **Text**, enter the content and size, then click the canvas to place a
 text object. Text remains editable project data and exports as an SVG

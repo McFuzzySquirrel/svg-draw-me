@@ -217,6 +217,29 @@ describe("stroke-preserving document", () => {
     expect(projectToSvg(project)).toContain("<radialGradient");
   });
 
+  it("round trips and exports normalized editable paths", () => {
+    const project = appendShape(createProject(), {
+      kind: "path",
+      style: {
+        stroke: { color: "#111111", width: 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+        fill: null,
+      },
+      pointerType: "mouse",
+      startedAt: 0,
+      endedAt: 1,
+      geometry: {
+        commands: [
+          { type: "M", x: 0, y: 0 },
+          { type: "C", x1: 10, y1: 0, x2: 10, y2: 20, x: 20, y: 20 },
+          { type: "Z" },
+        ],
+      },
+    });
+
+    expect(deserializeProject(serializeProject(project))).toEqual(project);
+    expect(projectToSvg(project)).toContain('d="M 0 0 C 10 0 10 20 20 20 Z"');
+  });
+
   it("round trips and exports constrained blur effects", () => {
     const project = appendShape(createProject(), {
       kind: "ellipse",

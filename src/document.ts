@@ -4,6 +4,7 @@ import type {
   FillTarget,
   ProjectLayer,
   ProjectTransform,
+  PathCommand,
   Shape,
   ShapeDraft,
   Stroke,
@@ -250,8 +251,26 @@ function validateShape(value: unknown): Shape {
   if (value.kind === "curve" && hasFiniteNumbers(geometry, ["x1", "y1", "cx", "cy", "x2", "y2"])) {
     return { ...base, kind: "curve", geometry: { x1: geometry.x1, y1: geometry.y1, cx: geometry.cx, cy: geometry.cy, x2: geometry.x2, y2: geometry.y2 } };
   }
+  if (value.kind === "path" && Array.isArray(geometry.commands) && geometry.commands.length > 0) {
+    return { ...base, kind: "path", geometry: { commands: geometry.commands.map(validatePathCommand) } };
+  }
   if (value.kind === "polygon" && Array.isArray(geometry.points) && geometry.points.length >= 2) {
     return { ...base, kind: "polygon", geometry: { points: geometry.points.map(validateShapePoint) } };
+  }
+
+  function validatePathCommand(value: unknown): PathCommand {
+    if (!isRecord(value) || typeof value.type !== "string") throw new Error("Invalid project path command.");
+    if (value.type === "Z") return { type: "Z" };
+    if ((value.type === "M" || value.type === "L") && hasFiniteNumbers(value, ["x", "y"])) {
+      return { type: value.type, x: value.x, y: value.y };
+    }
+    if (value.type === "Q" && hasFiniteNumbers(value, ["x1", "y1", "x", "y"])) {
+      return { type: "Q", x1: value.x1, y1: value.y1, x: value.x, y: value.y };
+    }
+    if (value.type === "C" && hasFiniteNumbers(value, ["x1", "y1", "x2", "y2", "x", "y"])) {
+      return { type: "C", x1: value.x1, y1: value.y1, x2: value.x2, y2: value.y2, x: value.x, y: value.y };
+    }
+    throw new Error("Invalid project path command.");
   }
   throw new Error("Invalid project shape.");
 }

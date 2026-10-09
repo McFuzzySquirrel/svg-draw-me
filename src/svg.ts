@@ -1,4 +1,5 @@
 import type { DrawingProject, ProjectLayer, Shape, Stroke, TextObject } from "./types";
+import { pathCommandsToSvg } from "./path";
 import { projectTransformToSvg } from "./transforms";
 
 export const MAX_EDITABLE_METADATA_LENGTH = 1_000_000;
@@ -148,6 +149,9 @@ function shapeToSvg(shape: Shape): string {
   if (shape.kind === "curve") {
     const g = shape.geometry;
     return wrapTransform(`<path d="M ${g.x1} ${g.y1} Q ${g.cx} ${g.cy} ${g.x2} ${g.y2}" ${stroke} ${fill} ${effect}/>`, projectTransformToSvg(shape.transform));
+  }
+  if (shape.kind === "path") {
+    return wrapTransform(`<path d="${pathCommandsToSvg(shape.geometry.commands)}" ${stroke} ${fill} ${effect}/>`, projectTransformToSvg(shape.transform));
   }
   return "";
 }

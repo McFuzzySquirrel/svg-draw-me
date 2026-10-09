@@ -5,8 +5,9 @@ import { appendShape, appendStroke, applyFill, cloneProject, createProject, dese
 import { createSvgBlob, findUnsupportedSvgFeatures, getSvgDimensions } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
 import { findFillTarget, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke } from "./geometry";
+import { parseEditablePath } from "./path";
 import { applyProjectTransform, createProjectLayerContainers } from "./transforms";
-import type { DrawingProject, GradientPaint, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle, TextObject } from "./types";
+import type { DrawingProject, GradientPaint, PathCommand, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle, TextObject } from "./types";
 import "./styles.css";
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -67,7 +68,7 @@ controls.innerHTML = `
   <label>Canvas width <input id="canvas-width" type="number" min="1" step="1" value="${project.width}"></label>
   <label>Canvas height <input id="canvas-height" type="number" min="1" step="1" value="${project.height}"></label>
   <label>Grid size <input id="grid-size" type="number" min="1" step="1" value="${gridSize}"></label>
-  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="text">Text</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
+  <label>Tool <select id="tool"><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="text">Text</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option><option value="path">Path</option></select></label>
   <label>Text <input id="text-content" type="text" maxlength="10000" value="Text"></label>
   <label>Text size <input id="text-size" type="number" min="1" step="1" value="32"></label>
   <label>Font <input id="text-font" type="text" value="Inter, sans-serif"></label>
@@ -141,14 +142,16 @@ controls.innerHTML = `
   </details>
   <details class="path-editor-panel">
     <summary>Edit paths</summary>
-    <label>Curve <select id="path-selected"></select></label>
+    <label>Path <select id="path-selected"></select></label>
+    <label>Node <select id="path-node"></select></label>
+    <label>Command <select id="path-command"><option value="M">Move</option><option value="L">Line</option><option value="Q">Quadratic</option><option value="C">Cubic</option><option value="Z">Close</option></select></label>
+    <label>x <input id="path-x" type="number" step="1"></label>
+    <label>y <input id="path-y" type="number" step="1"></label>
     <label>x1 <input id="path-x1" type="number" step="1"></label>
     <label>y1 <input id="path-y1" type="number" step="1"></label>
-    <label>cx <input id="path-cx" type="number" step="1"></label>
-    <label>cy <input id="path-cy" type="number" step="1"></label>
     <label>x2 <input id="path-x2" type="number" step="1"></label>
     <label>y2 <input id="path-y2" type="number" step="1"></label>
-    <button id="path-save" type="button">Save path</button>
+    <button id="path-save" type="button">Save node</button>
   </details>
   <p id="status" role="status">Draw with a mouse, finger, or stylus.</p>
   </span>
@@ -262,19 +265,34 @@ const syncPathEditor = (): void => {
   const select = controls.querySelector<HTMLSelectElement>("#path-selected");
   if (!select) return;
   const current = select.value;
-  const curves = project.shapes.filter((shape) => shape.kind === "curve");
-  select.replaceChildren(...curves.map((shape, index) => {
+  const paths = project.shapes.filter((shape) => shape.kind === "path");
+  select.replaceChildren(...paths.map((shape, index) => {
     const option = document.createElement("option");
     option.value = shape.id;
-    option.textContent = `Curve ${index + 1}`;
+    option.textContent = `Path ${index + 1}`;
     return option;
   }));
-  if (curves.some((shape) => shape.id === current)) select.value = current;
-  const selected = curves.find((shape) => shape.id === select.value);
-  if (!selected || selected.kind !== "curve") return;
-  for (const [id, value] of Object.entries(selected.geometry)) {
-    const input = controls.querySelector<HTMLInputElement>(`#path-${id}`);
-    if (input) input.value = String(value);
+  if (paths.some((shape) => shape.id === current)) select.value = current;
+  const selected = paths.find((shape) => shape.id === select.value);
+  const nodeSelect = controls.querySelector<HTMLSelectElement>("#path-node");
+  if (!selected || !nodeSelect) return;
+  const nodeIndex = Math.min(Number(nodeSelect.value) || 0, selected.geometry.commands.length - 1);
+  nodeSelect.replaceChildren(...selected.geometry.commands.map((command, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = `${index + 1}: ${command.type}`;
+    return option;
+  }));
+  nodeSelect.value = String(nodeIndex);
+  const command = selected.geometry.commands[nodeIndex];
+  if (!command) return;
+  const commandSelect = controls.querySelector<HTMLSelectElement>("#path-command");
+  if (commandSelect) commandSelect.value = command.type;
+  for (const key of ["x", "y", "x1", "y1", "x2", "y2"]) {
+    const input = controls.querySelector<HTMLInputElement>(`#path-${key}`);
+    const value = key in command ? command[key as keyof typeof command] : undefined;
+    if (input) input.value = typeof value === "number" ? String(value) : "";
+    input?.toggleAttribute("disabled", !(key in command));
   }
 };
 
@@ -481,6 +499,17 @@ const drawShape = (graphics: Graphics, shape: Shape): void => {
     const g = shape.geometry;
     graphics.moveTo(g.x1, g.y1).quadraticCurveTo(g.cx, g.cy, g.x2, g.y2).stroke(stroke);
   }
+  if (shape.kind === "path") {
+    for (const command of shape.geometry.commands) {
+      if (command.type === "M") graphics.moveTo(command.x, command.y);
+      if (command.type === "L") graphics.lineTo(command.x, command.y);
+      if (command.type === "Q") graphics.quadraticCurveTo(command.x1, command.y1, command.x, command.y);
+      if (command.type === "C") graphics.bezierCurveTo(command.x1, command.y1, command.x2, command.y2, command.x, command.y);
+      if (command.type === "Z") graphics.closePath();
+    }
+    if (fill) graphics.fill(fill);
+    graphics.stroke(stroke);
+  }
 };
 
 const shapeFromPoints = (kind: ShapeKind, start: StrokePoint, end: StrokePoint): ShapeDraft => {
@@ -499,6 +528,7 @@ const shapeFromPoints = (kind: ShapeKind, start: StrokePoint, end: StrokePoint):
   if (kind === "rectangle") return { ...meta, kind, geometry: { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) } };
   if (kind === "ellipse") return { ...meta, kind, geometry: { cx: (start.x + end.x) / 2, cy: (start.y + end.y) / 2, rx: Math.abs(end.x - start.x) / 2, ry: Math.abs(end.y - start.y) / 2 } };
   if (kind === "curve") return { ...meta, kind, geometry: { x1: start.x, y1: start.y, cx: (start.x + end.x) / 2, cy: Math.min(start.y, end.y) - Math.abs(end.x - start.x) / 3, x2: end.x, y2: end.y } };
+  if (kind === "path") return { ...meta, kind, geometry: { commands: [{ type: "M", x: start.x, y: start.y }, { type: "L", x: end.x, y: end.y }] } };
   return { ...meta, kind: "polygon", geometry: { points: [start, end] } };
 };
 
@@ -522,6 +552,21 @@ const shapeFromPointList = (kind: ShapeKind, points: StrokePoint[]): ShapeDraft 
       startedAt: activePointer?.startedAt ?? first.time,
       endedAt: last.time,
       geometry: { points: points.map(({ x, y }) => ({ x, y })) },
+    };
+  }
+  if (kind === "path") {
+    return {
+      kind,
+      style: {
+        stroke: currentStyle,
+        fill: fillEnabled && !gradientEnabled ? fillColor : null,
+        ...(fillEnabled && gradientEnabled ? { gradient: createGradientPaint() } : {}),
+        ...(blurEnabled ? { effect: { type: "blur" as const, strength: blurStrength } } : {}),
+      },
+      pointerType: activePointer?.type ?? "mouse",
+      startedAt: first.time,
+      endedAt: last.time,
+      geometry: { commands: points.map((point, index) => index === 0 ? { type: "M" as const, x: point.x, y: point.y } : { type: "L" as const, x: point.x, y: point.y }) },
     };
   }
   return shapeFromPoints(kind, first, last);
@@ -965,21 +1010,30 @@ controls.querySelector<HTMLButtonElement>("#layer-save")?.addEventListener("clic
   setStatus("Object layer assignment updated.");
 });
 controls.querySelector<HTMLSelectElement>("#path-selected")?.addEventListener("change", syncPathEditor);
+controls.querySelector<HTMLSelectElement>("#path-node")?.addEventListener("change", syncPathEditor);
 controls.querySelector<HTMLButtonElement>("#path-save")?.addEventListener("click", () => {
   const id = controls.querySelector<HTMLSelectElement>("#path-selected")?.value;
   const shape = project.shapes.find((candidate) => candidate.id === id);
-  if (!shape || shape.kind !== "curve") return setStatus("No curved path selected.");
-  const values = ["x1", "y1", "cx", "cy", "x2", "y2"].map((key) => [
-    key,
-    Number(controls.querySelector<HTMLInputElement>(`#path-${key}`)?.value),
-  ] as const);
-  if (values.some(([, value]) => !Number.isFinite(value))) {
-    return setStatus("All path coordinates must be finite numbers.");
+  if (!shape || shape.kind !== "path") return setStatus("No editable path selected.");
+  const nodeIndex = Number(controls.querySelector<HTMLSelectElement>("#path-node")?.value);
+  const type = controls.querySelector<HTMLSelectElement>("#path-command")?.value as PathCommand["type"];
+  const numberValue = (key: string): number => Number(controls.querySelector<HTMLInputElement>(`#path-${key}`)?.value);
+  const x = numberValue("x");
+  const y = numberValue("y");
+  if (!Number.isInteger(nodeIndex) || nodeIndex < 0 || nodeIndex >= shape.geometry.commands.length) {
+    return setStatus("No path node selected.");
   }
+  let command: PathCommand;
+  if (type === "Z") command = { type: "Z" };
+  else if (type === "M" || type === "L") command = { type, x, y };
+  else if (type === "Q") command = { type, x1: numberValue("x1"), y1: numberValue("y1"), x, y };
+  else command = { type: "C", x1: numberValue("x1"), y1: numberValue("y1"), x2: numberValue("x2"), y2: numberValue("y2"), x, y };
+  const values = Object.values(command).filter((value) => typeof value === "number");
+  if (values.some((value) => !Number.isFinite(value))) return setStatus("All path coordinates must be finite numbers.");
   history.push(cloneProject(project));
-  shape.geometry = Object.fromEntries(values) as typeof shape.geometry;
+  shape.geometry.commands[nodeIndex] = command;
   redraw();
-  setStatus("Path updated.");
+  setStatus("Path node updated.");
 });
 
 const download = (filename: string, content: string, type = "image/svg+xml"): void => {
@@ -1212,6 +1266,36 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
     };
     referenceRenderVersion += 1;
     project.importedSvgs.push(reference);
+    let editablePathCount = 0;
+    const parsedSvg = new DOMParser().parseFromString(markup, "image/svg+xml");
+    for (const pathElement of Array.from(parsedSvg.querySelectorAll("path"))) {
+      const d = pathElement.getAttribute("d");
+      if (!d) continue;
+      try {
+        const commands = parseEditablePath(d);
+        const importedStroke = pathElement.getAttribute("stroke") ?? "";
+        const importedFill = pathElement.getAttribute("fill") ?? "";
+        const strokeColor = /^#[0-9a-f]{6}$/i.test(importedStroke) ? importedStroke : "#111111";
+        const fillColorValue = /^#[0-9a-f]{6}$/i.test(importedFill) ? importedFill : null;
+        const strokeWidth = Number(pathElement.getAttribute("stroke-width"));
+        project.shapes.push({
+          id: crypto.randomUUID(),
+          kind: "path",
+          geometry: { commands },
+          transform: { translateX: reference.x, translateY: reference.y, rotation: 0, scaleX: 1, scaleY: 1 },
+          style: {
+            stroke: { color: strokeColor, width: Number.isFinite(strokeWidth) && strokeWidth > 0 ? strokeWidth : 2, opacity: 1, lineCap: "round", lineJoin: "round" },
+            fill: fillColorValue,
+          },
+          pointerType: "mouse",
+          startedAt: 0,
+          endedAt: 0,
+        });
+        editablePathCount += 1;
+      } catch {
+        // Keep unsupported or malformed paths in the original reference markup.
+      }
+    }
     referenceBounds.set(reference.id, { x: reference.x, y: reference.y, width, height });
     imported.position.set(reference.x, reference.y);
     imported.alpha = 0.8;
@@ -1219,9 +1303,11 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
     expandProjectToReferenceBounds(project, referenceBounds);
     await refreshReferenceLayer(project);
     const unsupported = findUnsupportedSvgFeatures(markup);
+    const pathStatus = editablePathCount ? ` ${editablePathCount} path${editablePathCount === 1 ? "" : "s"} are editable.` : "";
     setStatus(unsupported.length
-      ? `${file.name} imported; preview may differ for unsupported features: ${unsupported.join(", ")}.`
-      : `${file.name} imported as a vector reference layer.`);
+      ? `${file.name} imported; preview may differ for unsupported features: ${unsupported.join(", ")}.${pathStatus}`
+      : `${file.name} imported as a vector reference layer.${pathStatus}`);
+    redraw();
   } catch (error) {
     setStatus(`Could not load ${file.name}: ${error instanceof Error ? error.message : "unknown error"}`);
   } finally {

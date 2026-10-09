@@ -107,11 +107,14 @@ adding independent one-off representations.
 - The initial text slice is implemented with editable text, font size/family,
   color, alignment, transforms, validation, PixiJS preview, SVG export, and a
   generic sans-serif fallback. Text-to-path conversion remains future work.
-- [x] Add curved-path selection and point editing built on stable IDs and the
-  existing geometry helpers.
+- [x] Add numeric path-node editing for authored and imported `M/L/Q/C/Z`
+  paths, including normalization of supported shorthand commands. Unsupported
+  or malformed imported paths remain read-only with a status warning.
 - Add layer/group duplication, reordering, isolation, visibility, and opacity
   controls.
 - Reuse transforms, layers, and stable IDs across all new object types.
+
+Elliptical arcs and other SVG path commands remain future extensions.
 
 ### Phase 6: Verification and documentation
 

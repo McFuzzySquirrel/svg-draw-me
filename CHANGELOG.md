@@ -8,7 +8,7 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 - Browser-level interaction coverage.
 - Gradient strokes, shared paint resources, text-to-path conversion, and
-  arbitrary SVG path-node editing.
+  additional SVG path commands such as elliptical arcs.
 
 ### Added
 
@@ -27,7 +27,8 @@ All notable changes are documented here. This project follows Keep a Changelog c
 - Layer management controls, unsupported-SVG feature reporting, bounded
   editable metadata, and editable text objects with SVG export.
 - Two-color linear or radial gradient fills for new filled shapes.
-- Bounded blur effects and curved-path point editing.
+- Bounded blur effects and numeric SVG path-node editing for supported
+  M/L/Q/C/Z commands, including imported path extraction.
 - Object-to-layer assignment and generic sans-serif font fallback for text.
 
 ### Fixed

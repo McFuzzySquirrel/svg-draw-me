@@ -50,6 +50,10 @@ The document model now stores first-class lines, rectangles, ellipses, polygons,
 
 Drawing input is clamped to the project dimensions, while the viewport mask and SVG clip path keep artwork and references within the canvas. Users can toggle a non-exported alignment grid, save and reopen the complete project as a local `.svgdraw` file, and pan with a touch-friendly Pan tool. Two-finger pinch gestures now pan and zoom together, and common toolbar actions use compact accessible icon buttons.
 
+## Follow-up feature — Resizable canvas, adjustable grid, and reference eraser (complete)
+
+Canvas width and height and grid spacing are editable from the toolbar. Importing a raster image or SVG expands the canvas to include the reference bounds. The eraser removes whole raster/SVG reference layers as well as strokes and shapes, and undo restores erased references from both new and loaded projects.
+
 ## Phase 1 — Foundation and document model
 
 ### Scope

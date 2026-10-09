@@ -36,7 +36,7 @@ Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Poly
 
 Shapes remain first-class objects in the editable project model and export as SVG line, rectangle, ellipse, polygon, or quadratic-path elements.
 
-The project boundary is fixed by the canvas size. New strokes and shapes stay inside it, and the visible artwork and references are clipped to the canvas edges.
+Set **Canvas width** and **Canvas height** in the toolbar to resize the project. New strokes and shapes stay inside the canvas, and visible artwork and references are clipped to its edges. Importing a reference larger than the current canvas expands the canvas to show the full reference.
 
 ### Fill and clear objects
 
@@ -46,11 +46,11 @@ Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose 
 
 On a narrow screen, use **Menu** to show the controls and **Hide menu** to collapse them and give the canvas more space. The drawing remains unchanged when the menu is collapsed.
 
-Toolbar actions use compact icons; focus or hover an icon button to see its label. Use **Show grid**/**Hide grid** to toggle a 50-unit alignment grid. The grid overlays reference images, and artwork appears above both. The grid is only an editing aid and is not included in exports.
+Toolbar actions use compact icons; focus or hover an icon button to see its label. Use **Show grid**/**Hide grid** to toggle the alignment grid, and set **Grid size** to change its spacing (50 units by default). The grid covers the canvas, overlays reference images, and artwork appears above both. The grid is only an editing aid and is not included in exports.
 
 ### Erase
 
-Choose **Eraser**, then touch a stroke or shape. The complete object is removed and can be restored with **Undo**. The current eraser removes whole objects rather than splitting a stroke into partial segments.
+Choose **Eraser**, then touch a stroke, shape, or reference image/SVG. The complete object or reference layer is removed and can be restored with **Undo**. The current eraser removes whole items rather than splitting a stroke into partial segments.
 
 ### Zoom and pan
 
@@ -68,7 +68,7 @@ Zoom and pan affect the viewport only; stored stroke coordinates remain in proje
 1. Choose **Reference image**.
 2. Select a PNG or JPG.
 3. The image appears as a translucent reference behind new strokes.
-4. Draw over the reference.
+4. Draw over the reference. If it is larger than the canvas, the canvas expands to contain it.
 
 The reference is kept separately from user strokes. It is not automatically vectorized.
 
@@ -76,14 +76,14 @@ The reference is kept separately from user strokes. It is not automatically vect
 
 1. Choose **Import SVG**.
 2. Select an SVG file.
-3. The SVG appears as a crisp vector reference layer.
+3. The SVG appears as a crisp vector reference layer. If it is larger than the canvas, the canvas expands to contain it.
 
 The original SVG markup is retained in the project model for export. Complex filters, masks, CSS, or external assets may not preview identically.
 
 ### Undo and clear
 
-- **Undo** removes the most recently completed user stroke.
-- **Clear** removes all user strokes.
+- **Undo** reverses the most recently completed drawing or eraser action.
+- **Clear** removes all user strokes and shapes.
 - Imported reference layers are not removed by these controls.
 
 ### Export
@@ -95,7 +95,7 @@ The original SVG markup is retained in the project model for export. Complex fil
 
 - Choose **Save project** to download a `.svgdraw` project file containing the editable artwork and imported references.
 - Choose **Open project** and select a previously saved `.svgdraw` file to restore the project and continue editing.
-- Project files are local JSON data; save a new copy after making further changes. Loading a project replaces the current canvas and clears its undo history.
+- Project files are local JSON data; save a new copy after making further changes. Loading a project restores its canvas dimensions and references, replaces the current canvas, and clears its undo history.
 
 ## Offline and Reconnect Behavior
 

@@ -32,12 +32,12 @@ The application currently runs entirely in the browser. Projects are held in mem
 | Shape tools | Creates first-class lines, rectangles, ellipses, polygons, and curved lines with optional fills. |
 | Fill bucket | Fills or clears tolerant closed hand-drawn loops and existing fillable shapes without flattening their geometry or stroke history. |
 | Mobile menu | Collapses the toolbar to maximize drawing space on narrow screens. |
-| Bounded workspace | Clips drawing and reference layers to the project canvas; new drawing points stay within its edges. |
-| Whole-object eraser | Removes a complete touched stroke or shape and supports undo. |
+| Bounded workspace | Clips drawing and reference layers to an editable project canvas; importing a larger reference expands the canvas to contain it. |
+| Whole-object eraser | Removes a complete touched stroke, shape, or reference layer and supports undo. |
 | Pointer input | Supports mouse, touch, and pen/stylus pointer events. |
-| Responsive workspace | Keeps a 1200×800 project coordinate space centered with letterboxing. |
+| Responsive workspace | Fits the current project coordinate space and centers it with letterboxing. |
 | Zoom and navigation | Provides 25%–800% zoom, reset controls, pointer-centered wheel zoom, two-finger pinch-and-pan, a touch-friendly Pan tool, and Space/middle-mouse panning. |
-| Grid overlay | Toggles a project-space grid to help align game-art details. |
+| Grid overlay | Toggles a project-space grid with adjustable spacing to help align game-art details. |
 | Raster tracing references | Imports PNG/JPG files as translucent reference layers. |
 | SVG references | Imports SVG files through PixiJS vector parsing while preserving original markup in the project model. |
 | Standard SVG export | Downloads visible artwork as a normal SVG document. |
@@ -118,12 +118,13 @@ The Vite build uses relative asset paths so the app works at the repository Page
 
 ## Configuration
 
-The app has no environment variables, server configuration, authentication settings, or runtime configuration files. The default project size is defined in `src/document.ts`:
+The app has no environment variables, server configuration, authentication settings, or runtime configuration files. New projects start at 1200×800. Use the canvas width and height controls to resize the project; importing a larger reference expands it automatically. Grid spacing is also editable.
 
 | Setting | Default | Purpose |
 |---|---:|---|
-| Project width | `1200` | Fixed document coordinate width. |
-| Project height | `800` | Fixed document coordinate height. |
+| Project width | `1200` | Initial document coordinate width; editable in the toolbar. |
+| Project height | `800` | Initial document coordinate height; editable in the toolbar. |
+| Grid spacing | `50` | Initial project-space grid spacing; editable in the toolbar. |
 | Zoom minimum | `0.25` | 25% viewport zoom. |
 | Zoom maximum | `8` | 800% viewport zoom. |
 

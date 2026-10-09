@@ -1,9 +1,9 @@
 import { Application, Assets, Container, Graphics, Sprite } from "pixi.js";
 import { clampProjectPoint, viewportToProject, zoomTransformAtPoint } from "./coordinates";
-import { appendShape, appendStroke, applyFill, cloneProject, createProject, deserializeProject, serializeProject } from "./document";
-import { createSvgBlob } from "./imports";
+import { appendShape, appendStroke, applyFill, cloneProject, createProject, deserializeProject, dimensionsForBounds, serializeProject } from "./document";
+import { createSvgBlob, getSvgDimensions } from "./imports";
 import { projectToEditableSvg, projectToSvg } from "./svg";
-import { findFillTarget, isClosedStroke, pointHitsShape, pointHitsStroke } from "./geometry";
+import { findFillTarget, isClosedStroke, pointHitsReference, pointHitsShape, pointHitsStroke } from "./geometry";
 import type { DrawingProject, PointerKind, Shape, ShapeDraft, ShapeKind, Stroke, StrokePoint, StrokeStyle } from "./types";
 import "./styles.css";
 
@@ -31,6 +31,7 @@ let viewportLayer: Container;
 let gridLayer: Graphics;
 let viewportMask: Graphics;
 let gridEnabled = false;
+let gridSize = 50;
 let canvasScale = 1;
 let canvasOffsetX = 0;
 let canvasOffsetY = 0;
@@ -42,6 +43,8 @@ let spacePressed = false;
 let panPointer: { id: number; x: number; y: number } | null = null;
 const pointers = new Map<number, { x: number; y: number; type: string }>();
 let pinchStart: { distance: number; zoom: number; x: number; y: number; panX: number; panY: number } | null = null;
+let referenceBounds = new Map<string, { x: number; y: number; width: number; height: number }>();
+let referenceRenderVersion = 0;
 
 const controls = document.createElement("section");
 controls.className = "controls";
@@ -51,6 +54,9 @@ controls.innerHTML = `
   <div class="brand"><strong>SVG Draw Me</strong><span>stroke-preserving sketchbook</span></div>
   <label>Color <input id="color" type="color" value="${currentStyle.color}"></label>
   <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
+  <label>Canvas width <input id="canvas-width" type="number" min="1" step="1" value="${project.width}"></label>
+  <label>Canvas height <input id="canvas-height" type="number" min="1" step="1" value="${project.height}"></label>
+  <label>Grid size <input id="grid-size" type="number" min="1" step="1" value="${gridSize}"></label>
   <label>Tool <select id="tool"><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option></select></label>
   <span class="control-group" aria-label="Shape fill controls">
     <label for="fill-enabled"><input id="fill-enabled" type="checkbox"> Fill shape</label>
@@ -121,12 +127,12 @@ viewportLayer.mask = viewportMask;
 const redraw = (): void => {
   gridLayer.clear();
   if (gridEnabled) {
-    const gridStep = Math.max(50, Math.ceil(Math.max(project.width, project.height) / 2000 / 50) * 50);
+    const gridStep = Math.max(gridSize, Math.ceil(Math.max(project.width, project.height) / 2000 / gridSize) * gridSize);
     for (let x = 0; x <= project.width; x += gridStep) {
-      gridLayer.moveTo(x, 0).lineTo(x, project.height).stroke({ color: x % 100 === 0 ? "#94a3b8" : "#cbd5e1", alpha: x % 100 === 0 ? 0.5 : 0.28, width: x % 100 === 0 ? 1.5 : 1 });
+      gridLayer.moveTo(x, 0).lineTo(x, project.height).stroke({ color: x % (gridSize * 2) === 0 ? "#94a3b8" : "#cbd5e1", alpha: x % (gridSize * 2) === 0 ? 0.5 : 0.28, width: x % (gridSize * 2) === 0 ? 1.5 : 1 });
     }
     for (let y = 0; y <= project.height; y += gridStep) {
-      gridLayer.moveTo(0, y).lineTo(project.width, y).stroke({ color: y % 100 === 0 ? "#94a3b8" : "#cbd5e1", alpha: y % 100 === 0 ? 0.5 : 0.28, width: y % 100 === 0 ? 1.5 : 1 });
+      gridLayer.moveTo(0, y).lineTo(project.width, y).stroke({ color: y % (gridSize * 2) === 0 ? "#94a3b8" : "#cbd5e1", alpha: y % (gridSize * 2) === 0 ? 0.5 : 0.28, width: y % (gridSize * 2) === 0 ? 1.5 : 1 });
     }
   }
   drawingLayer.clear();
@@ -236,13 +242,45 @@ const eraseAt = (point: { x: number; y: number }): void => {
       break;
     }
   }
-  if (strokeIndex < 0 && shapeIndex < 0) {
-    setStatus("Nothing to erase.");
-    return;
+  if (strokeIndex >= 0 || shapeIndex >= 0) {
+    history.push(cloneProject(project));
+    if (shapeIndex > strokeIndex) project.shapes.splice(shapeIndex, 1);
+    else project.strokes.splice(strokeIndex, 1);
+  } else {
+    let topmostSvgIndex = -1;
+    for (let index = project.importedSvgs.length - 1; index >= 0; index -= 1) {
+      const reference = project.importedSvgs[index]!;
+      const bounds = referenceBounds.get(reference.id);
+      if (reference.visible && bounds && pointHitsReference(point, bounds, radius)) {
+        topmostSvgIndex = index;
+        break;
+      }
+    }
+    let topmostRasterIndex = -1;
+    for (let index = project.rasterReferences.length - 1; index >= 0; index -= 1) {
+      const reference = project.rasterReferences[index]!;
+      const bounds = referenceBounds.get(reference.id) ?? reference;
+      if (reference.visible && pointHitsReference(point, bounds, radius)) {
+        topmostRasterIndex = index;
+        break;
+      }
+    }
+    if (topmostSvgIndex < 0 && topmostRasterIndex < 0) {
+      setStatus("Nothing to erase.");
+      return;
+    }
+    history.push(cloneProject(project));
+    if (topmostSvgIndex >= 0) {
+      const [removed] = project.importedSvgs.splice(topmostSvgIndex, 1);
+      if (removed) referenceBounds.delete(removed.id);
+    } else {
+      const [removed] = project.rasterReferences.splice(topmostRasterIndex, 1);
+      if (removed) referenceBounds.delete(removed.id);
+    }
+    void refreshReferenceLayer(project).catch((error: unknown) => {
+      setStatus(`Could not update references: ${error instanceof Error ? error.message : "unknown error"}`);
+    });
   }
-  history.push(cloneProject(project));
-  if (shapeIndex > strokeIndex) project.shapes.splice(shapeIndex, 1);
-  else project.strokes.splice(strokeIndex, 1);
   redraw();
   setStatus("Object erased.");
 };
@@ -487,12 +525,44 @@ document.querySelector<HTMLInputElement>("#width")?.addEventListener("input", (e
   const output = document.querySelector<HTMLOutputElement>("#width-value");
   if (output) output.value = `${width}px`;
 });
+document.querySelector<HTMLInputElement>("#canvas-width")?.addEventListener("change", (event) => {
+  const width = Number((event.target as HTMLInputElement).value);
+  if (!Number.isFinite(width) || width <= 0) {
+    syncCanvasSizeInputs();
+    return setStatus("Canvas dimensions must be positive numbers.");
+  }
+  setCanvasSize(width, project.height);
+});
+document.querySelector<HTMLInputElement>("#canvas-height")?.addEventListener("change", (event) => {
+  const height = Number((event.target as HTMLInputElement).value);
+  if (!Number.isFinite(height) || height <= 0) {
+    syncCanvasSizeInputs();
+    return setStatus("Canvas dimensions must be positive numbers.");
+  }
+  setCanvasSize(project.width, height);
+});
+document.querySelector<HTMLInputElement>("#grid-size")?.addEventListener("change", (event) => {
+  const size = Number((event.target as HTMLInputElement).value);
+  if (!Number.isFinite(size) || size < 1) {
+    (event.target as HTMLInputElement).value = String(gridSize);
+    return setStatus("Grid size must be a positive number.");
+  }
+  gridSize = size;
+  redraw();
+});
 document.querySelector<HTMLButtonElement>("#undo")?.addEventListener("click", () => {
   const previous = history.pop();
   if (!previous) return setStatus("Nothing to undo.");
+  const previousReferenceIds = [...previous.rasterReferences, ...previous.importedSvgs].map(({ id }) => id).join("|");
+  const currentReferenceIds = [...project.rasterReferences, ...project.importedSvgs].map(({ id }) => id).join("|");
   Object.assign(project, previous);
+  if (previousReferenceIds !== currentReferenceIds) {
+    void refreshReferenceLayer(project).catch((error: unknown) => {
+      setStatus(`Could not restore references: ${error instanceof Error ? error.message : "unknown error"}`);
+    });
+  }
   redraw();
-  setStatus("Last stroke removed.");
+  setStatus("Last action undone.");
 });
 document.querySelector<HTMLButtonElement>("#clear")?.addEventListener("click", () => {
   if (!project.strokes.length && !project.shapes.length) return;
@@ -524,14 +594,15 @@ document.querySelector<HTMLInputElement>("#project-file")?.addEventListener("cha
   try {
     const loaded = deserializeProject(await file.text());
     const loadedReferences = await createReferenceLayer(loaded);
-    referencesLayer.removeChildren().forEach((child) => child.destroy());
-    referencesLayer.addChild(...loadedReferences.removeChildren());
+    expandProjectToReferenceBounds(loaded, loadedReferences.bounds);
+    replaceReferenceLayer(loadedReferences);
     Object.assign(project, loaded);
     history.length = 0;
     zoom = 1;
     panX = 0;
     panY = 0;
     viewportMask.clear().rect(0, 0, project.width, project.height).fill("#ffffff");
+    syncCanvasSizeInputs();
     syncScale();
     setStatus(`${file.name} opened. Continue editing your project.`);
   } catch (error) {
@@ -568,7 +639,7 @@ document.querySelector<HTMLInputElement>("#raster")?.addEventListener("change", 
     const dataUrl = await readFile(file);
     const image = await loadImage(dataUrl);
     const texture = await Assets.load({ src: dataUrl, parser: "texture" });
-    project.rasterReferences.push({
+    const reference = {
       id: crypto.randomUUID(),
       name: file.name,
       dataUrl,
@@ -578,13 +649,18 @@ document.querySelector<HTMLInputElement>("#raster")?.addEventListener("change", 
       height: image.height,
       opacity: 0.35,
       visible: true,
-    });
-    const reference = new Sprite(texture);
-    reference.position.set(0, 0);
-    reference.width = image.width;
-    reference.height = image.height;
-    reference.alpha = 0.35;
-    referencesLayer.addChild(reference);
+    };
+    referenceRenderVersion += 1;
+    project.rasterReferences.push(reference);
+    referenceBounds.set(reference.id, { x: 0, y: 0, width: image.width, height: image.height });
+    const sprite = new Sprite(texture);
+    sprite.position.set(reference.x, reference.y);
+    sprite.width = reference.width;
+    sprite.height = reference.height;
+    sprite.alpha = reference.opacity;
+    referencesLayer.addChild(sprite);
+    expandProjectToReferenceBounds(project, referenceBounds);
+    await refreshReferenceLayer(project);
     setStatus(`${file.name} added as a tracing reference.`);
   } catch (error) {
     setStatus(`Could not load ${file.name}: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -604,20 +680,32 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
       parser: "svg",
       data: { parseAsGraphicsContext: true },
     });
-    project.importedSvgs.push({
+    const imported = new Graphics(context);
+    const localBounds = imported.getLocalBounds();
+    const svgDimensions = getSvgDimensions(markup);
+    const x = Math.max(0, -Math.min(svgDimensions.x, localBounds.x));
+    const y = Math.max(0, -Math.min(svgDimensions.y, localBounds.y));
+    const width = Math.max(svgDimensions.x + svgDimensions.width, localBounds.x + localBounds.width) + x;
+    const height = Math.max(svgDimensions.y + svgDimensions.height, localBounds.y + localBounds.height) + y;
+    const reference = {
       id: crypto.randomUUID(),
       name: file.name,
       markup,
-      x: 0,
-      y: 0,
-      width: project.width,
-      height: project.height,
+      x,
+      y,
+      width,
+      height,
       opacity: 1,
       visible: true,
-    });
-    const imported = new Graphics(context);
+    };
+    referenceRenderVersion += 1;
+    project.importedSvgs.push(reference);
+    referenceBounds.set(reference.id, { x: reference.x, y: reference.y, width, height });
+    imported.position.set(reference.x, reference.y);
     imported.alpha = 0.8;
     referencesLayer.addChild(imported);
+    expandProjectToReferenceBounds(project, referenceBounds);
+    await refreshReferenceLayer(project);
     setStatus(`${file.name} imported as a vector reference layer.`);
   } catch (error) {
     setStatus(`Could not load ${file.name}: ${error instanceof Error ? error.message : "unknown error"}`);
@@ -633,8 +721,65 @@ const syncScale = (): void => {
 pixi.renderer.on("resize", syncScale);
 syncScale();
 
-async function createReferenceLayer(source: DrawingProject): Promise<Container> {
+const syncCanvasSizeInputs = (): void => {
+  const widthInput = document.querySelector<HTMLInputElement>("#canvas-width");
+  const heightInput = document.querySelector<HTMLInputElement>("#canvas-height");
+  if (widthInput) widthInput.value = String(project.width);
+  if (heightInput) heightInput.value = String(project.height);
+};
+
+const setCanvasSize = (width: number, height: number): void => {
+  project.width = width;
+  project.height = height;
+  viewportMask.clear().rect(0, 0, width, height).fill("#ffffff");
+  syncCanvasSizeInputs();
+  syncScale();
+};
+
+const expandProjectToReferenceBounds = (
+  target: DrawingProject,
+  bounds: Map<string, { x: number; y: number; width: number; height: number }>,
+): void => {
+  const { width, height } = dimensionsForBounds(target.width, target.height, bounds.values());
+  if (target === project) {
+    if (width !== project.width || height !== project.height) setCanvasSize(width, height);
+  } else {
+    target.width = width;
+    target.height = height;
+  }
+};
+
+const replaceReferenceLayer = (scene: {
+  layer: Container;
+  bounds: Map<string, { x: number; y: number; width: number; height: number }>;
+}): void => {
+  referenceRenderVersion += 1;
+  referencesLayer.removeChildren().forEach((child) => child.destroy());
+  referencesLayer.addChild(...scene.layer.removeChildren());
+  scene.layer.destroy();
+  referenceBounds = scene.bounds;
+};
+
+const refreshReferenceLayer = async (source: DrawingProject): Promise<void> => {
+  const version = ++referenceRenderVersion;
+  const scene = await createReferenceLayer(source);
+  if (version !== referenceRenderVersion) {
+    scene.layer.destroy({ children: true });
+    return;
+  }
+  expandProjectToReferenceBounds(source, scene.bounds);
+  referencesLayer.removeChildren().forEach((child) => child.destroy());
+  referencesLayer.addChild(...scene.layer.removeChildren());
+  scene.layer.destroy();
+  referenceBounds = scene.bounds;
+};
+
+async function createReferenceLayer(source: DrawingProject): Promise<{
+  layer: Container;
+  bounds: Map<string, { x: number; y: number; width: number; height: number }>;
+}> {
   const layer = new Container();
+  const bounds = new Map<string, { x: number; y: number; width: number; height: number }>();
   try {
     for (const reference of source.rasterReferences) {
       const texture = await Assets.load({ src: reference.dataUrl, parser: "texture" });
@@ -645,6 +790,12 @@ async function createReferenceLayer(source: DrawingProject): Promise<Container> 
       sprite.alpha = reference.opacity;
       sprite.visible = reference.visible;
       layer.addChild(sprite);
+      bounds.set(reference.id, {
+        x: reference.x,
+        y: reference.y,
+        width: reference.width,
+        height: reference.height,
+      });
     }
     for (const reference of source.importedSvgs) {
       const url = URL.createObjectURL(createSvgBlob(reference.markup));
@@ -655,10 +806,32 @@ async function createReferenceLayer(source: DrawingProject): Promise<Container> 
           data: { parseAsGraphicsContext: true },
         });
         const imported = new Graphics(context);
+        const localBounds = imported.getLocalBounds();
+        const svgDimensions = getSvgDimensions(reference.markup);
+        const xShift = Math.max(0, -Math.min(reference.x + svgDimensions.x, reference.x + localBounds.x));
+        const yShift = Math.max(0, -Math.min(reference.y + svgDimensions.y, reference.y + localBounds.y));
+        reference.x += xShift;
+        reference.y += yShift;
+        reference.width = Math.max(
+          reference.width,
+          svgDimensions.x + svgDimensions.width + xShift,
+          localBounds.x + localBounds.width + xShift,
+        );
+        reference.height = Math.max(
+          reference.height,
+          svgDimensions.y + svgDimensions.height + yShift,
+          localBounds.y + localBounds.height + yShift,
+        );
         imported.position.set(reference.x, reference.y);
         imported.alpha = reference.opacity * 0.8;
         imported.visible = reference.visible;
         layer.addChild(imported);
+        bounds.set(reference.id, {
+          x: reference.x,
+          y: reference.y,
+          width: reference.width,
+          height: reference.height,
+        });
       } finally {
         URL.revokeObjectURL(url);
       }
@@ -667,7 +840,7 @@ async function createReferenceLayer(source: DrawingProject): Promise<Container> 
     layer.destroy({ children: true });
     throw error;
   }
-  return layer;
+  return { layer, bounds };
 }
 
 function readFile(file: File): Promise<string> {

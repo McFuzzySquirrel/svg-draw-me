@@ -683,14 +683,16 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
     const imported = new Graphics(context);
     const localBounds = imported.getLocalBounds();
     const svgDimensions = getSvgDimensions(markup);
-    const width = Math.max(svgDimensions.width, localBounds.x + localBounds.width);
-    const height = Math.max(svgDimensions.height, localBounds.y + localBounds.height);
+    const x = Math.max(0, -Math.min(svgDimensions.x, localBounds.x));
+    const y = Math.max(0, -Math.min(svgDimensions.y, localBounds.y));
+    const width = Math.max(svgDimensions.x + svgDimensions.width, localBounds.x + localBounds.width) + x;
+    const height = Math.max(svgDimensions.y + svgDimensions.height, localBounds.y + localBounds.height) + y;
     const reference = {
       id: crypto.randomUUID(),
       name: file.name,
       markup,
-      x: 0,
-      y: 0,
+      x,
+      y,
       width,
       height,
       opacity: 1,
@@ -699,6 +701,7 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
     referenceRenderVersion += 1;
     project.importedSvgs.push(reference);
     referenceBounds.set(reference.id, { x: reference.x, y: reference.y, width, height });
+    imported.position.set(reference.x, reference.y);
     imported.alpha = 0.8;
     referencesLayer.addChild(imported);
     expandProjectToReferenceBounds(project, referenceBounds);
@@ -805,8 +808,20 @@ async function createReferenceLayer(source: DrawingProject): Promise<{
         const imported = new Graphics(context);
         const localBounds = imported.getLocalBounds();
         const svgDimensions = getSvgDimensions(reference.markup);
-        reference.width = Math.max(reference.width, svgDimensions.width, localBounds.x + localBounds.width);
-        reference.height = Math.max(reference.height, svgDimensions.height, localBounds.y + localBounds.height);
+        const xShift = Math.max(0, -Math.min(reference.x + svgDimensions.x, reference.x + localBounds.x));
+        const yShift = Math.max(0, -Math.min(reference.y + svgDimensions.y, reference.y + localBounds.y));
+        reference.x += xShift;
+        reference.y += yShift;
+        reference.width = Math.max(
+          reference.width,
+          svgDimensions.x + svgDimensions.width + xShift,
+          localBounds.x + localBounds.width + xShift,
+        );
+        reference.height = Math.max(
+          reference.height,
+          svgDimensions.y + svgDimensions.height + yShift,
+          localBounds.y + localBounds.height + yShift,
+        );
         imported.position.set(reference.x, reference.y);
         imported.alpha = reference.opacity * 0.8;
         imported.visible = reference.visible;

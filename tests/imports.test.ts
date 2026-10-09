@@ -9,8 +9,8 @@ describe("SVG imports", () => {
   });
 
   it("reads intrinsic dimensions from SVG attributes or its viewBox", () => {
-    expect(getSvgDimensions('<svg width="640px" height="480"></svg>')).toEqual({ width: 640, height: 480 });
-    expect(getSvgDimensions('<svg viewBox="-10 5 320 240"></svg>')).toEqual({ width: 320, height: 240 });
-    expect(getSvgDimensions("<svg></svg>")).toEqual({ width: 300, height: 150 });
+    expect(getSvgDimensions('<svg width="640px" height="480"></svg>')).toEqual({ x: 0, y: 0, width: 640, height: 480 });
+    expect(getSvgDimensions('<svg viewBox="-10 5 320 240"></svg>')).toEqual({ x: -10, y: 5, width: 320, height: 240 });
+    expect(getSvgDimensions("<svg></svg>")).toEqual({ x: 0, y: 0, width: 300, height: 150 });
   });
 });

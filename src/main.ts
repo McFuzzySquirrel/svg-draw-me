@@ -1378,7 +1378,7 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
   try {
     let markup = await file.text();
     if (!markup.includes("<svg")) return setStatus("That file does not contain SVG markup.");
-    // lgtm[js/xss-through-dom] SVG is parsed as inert XML, then unsafe nodes and attributes are removed.
+    // lgtm [js/xss-through-dom] SVG is parsed as inert XML, then unsafe nodes and attributes are removed.
     const parsedSvg = new DOMParser().parseFromString(markup, "image/svg+xml");
     for (const script of Array.from(parsedSvg.querySelectorAll("script"))) script.remove();
     for (const element of Array.from(parsedSvg.querySelectorAll("*"))) {

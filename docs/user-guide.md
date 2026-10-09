@@ -36,6 +36,8 @@ Use the **Tool** selector to choose **Line**, **Rectangle**, **Ellipse**, **Poly
 
 Shapes remain first-class objects in the editable project model and export as SVG line, rectangle, ellipse, polygon, or quadratic-path elements.
 
+The project boundary is fixed by the canvas size. New strokes and shapes stay inside it, and the visible artwork and references are clipped to the canvas edges.
+
 ### Fill and clear objects
 
 Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose **Fill bucket**, choose a **Fill color**, and tap inside the loop. The bucket accepts a small endpoint gap, keeps the original stroke points and metadata, and can be undone. Tap inside an existing filled loop or a filled rectangle, ellipse, or polygon to replace its fill. Choose **No fill** or **Clear fill** before tapping to remove an existing fill. Lines, curved lines, open loops, and clicks outside a fillable object are not filled.
@@ -43,6 +45,8 @@ Draw a freehand loop with **Pen**, leaving the endpoints close together. Choose 
 ### Mobile menu
 
 On a narrow screen, use **Menu** to show the controls and **Hide menu** to collapse them and give the canvas more space. The drawing remains unchanged when the menu is collapsed.
+
+Toolbar actions use compact icons; focus or hover an icon button to see its label. Use **Show grid**/**Hide grid** to toggle a 50-unit alignment grid. The grid is only an editing aid and is not included in exports.
 
 ### Erase
 
@@ -53,6 +57,7 @@ Choose **Eraser**, then touch a stroke or shape. The complete object is removed 
 - Use `+`, `−`, or **Reset zoom**.
 - Use the mouse wheel over the canvas to zoom around the pointer.
 - Use two fingers to pinch-zoom on touch devices.
+- Select **Pan** to drag the canvas with one finger on a touch device. Two-finger pinch gestures also pan while zooming.
 - Hold Space while dragging, or use the middle mouse button, to pan.
 - Zoom ranges from 25% to 800%.
 
@@ -86,9 +91,15 @@ The original SVG markup is retained in the project model for export. Complex fil
 - **Download SVG** creates a standard SVG containing visible imported layers and user stroke geometry.
 - **Download editable** creates an SVG containing the geometry plus project metadata intended to preserve stroke history.
 
+### Save and continue editing
+
+- Choose **Save project** to download a `.svgdraw` project file containing the editable artwork and imported references.
+- Choose **Open project** and select a previously saved `.svgdraw` file to restore the project and continue editing.
+- Project files are local JSON data; save a new copy after making further changes. Loading a project replaces the current canvas and clears its undo history.
+
 ## Offline and Reconnect Behavior
 
-There is no network-backed account or synchronization. Once the application assets are loaded, drawing and local file processing occur in the browser. Refreshing or closing the page can lose unsaved in-memory work.
+There is no network-backed account or synchronization. Once the application assets are loaded, drawing and local file processing occur in the browser. Save a `.svgdraw` project before refreshing or closing the page to continue editing later.
 
 ## Statuses and Notifications
 
@@ -124,7 +135,7 @@ Use the zoom buttons, mouse wheel, pinch gesture, or Space/middle-mouse pan.
 
 ### Work disappeared after closing the page
 
-The current release has no persistent project save/reopen workflow. Download an export before leaving the page.
+The app does not save work automatically. Use **Save project** before leaving the page, then **Open project** to continue later.
 
 ## Getting Help
 

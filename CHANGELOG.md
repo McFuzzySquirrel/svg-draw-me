@@ -6,7 +6,6 @@ All notable changes are documented here. This project follows Keep a Changelog c
 
 ### Planned
 
-- Project save/reopen workflow.
 - Layer management and more advanced editing controls.
 - Browser-level interaction coverage.
 
@@ -17,6 +16,9 @@ All notable changes are documented here. This project follows Keep a Changelog c
 - Fill bucket for tolerant closed freehand loops.
 - Collapsible mobile toolbar menu.
 - Whole-object eraser with undo support.
+- Project-bound drawing and clipping, optional grid overlay, and a touch-friendly Pan tool.
+- Save and reopen local `.svgdraw` project files to continue editing.
+- Compact, accessible icon buttons for common toolbar actions.
 
 ## [0.1.0] - 2026-10-08
 

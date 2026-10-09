@@ -46,6 +46,10 @@ The toolbar can now collapse on narrow screens through an accessible Menu/Hide m
 
 The document model now stores first-class lines, rectangles, ellipses, polygons, and quadratic curved lines alongside freehand strokes. The toolbar exposes Pen, Eraser, shape selection, outline controls, and optional fills. The eraser removes a complete touched object and participates in undo. Shape geometry is rendered through PixiJS and exported to standard and editable SVG.
 
+## Follow-up feature — Project bounds, save/reopen, grid, and mobile navigation (complete)
+
+Drawing input is clamped to the project dimensions, while the viewport mask and SVG clip path keep artwork and references within the canvas. Users can toggle a non-exported alignment grid, save and reopen the complete project as a local `.svgdraw` file, and pan with a touch-friendly Pan tool. Two-finger pinch gestures now pan and zoom together, and common toolbar actions use compact accessible icon buttons.
+
 ## Phase 1 — Foundation and document model
 
 ### Scope

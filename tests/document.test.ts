@@ -35,6 +35,8 @@ describe("stroke-preserving document", () => {
     const svg = projectToSvg(project);
     expect(svg).toContain('stroke="#ff0000"');
     expect(svg).toContain("M 0 0 L 10 10");
+    expect(svg).toContain('<clipPath id="project-bounds"><rect width="1200" height="800"/></clipPath>');
+    expect(svg).toContain('<g clip-path="url(#project-bounds)">');
   });
 
   it("exports a filled freehand loop as a closed SVG path", () => {
@@ -77,6 +79,31 @@ describe("stroke-preserving document", () => {
     expect(() => deserializeProject(JSON.stringify({ version: 99, strokes: [] }))).toThrow(
       "Unsupported or invalid project version",
     );
+  });
+
+  it("rejects project files with invalid dimensions", () => {
+    expect(() => deserializeProject(JSON.stringify({ version: 1, width: 0, height: 800, strokes: [] }))).toThrow(
+      "Project dimensions must be positive",
+    );
+    for (const width of ["wide", null, Number.NaN]) {
+      expect(() => deserializeProject(JSON.stringify({ version: 1, width, height: 800, strokes: [] }))).toThrow(
+        "Project dimensions must be positive",
+      );
+    }
+    expect(deserializeProject(JSON.stringify({ version: 1, strokes: [] }))).toMatchObject({ width: 1200, height: 800 });
+  });
+
+  it("rejects malformed nested project data before it can be loaded", () => {
+    const invalidProjects = [
+      { version: 1, strokes: [{}] },
+      { version: 1, strokes: [], shapes: [{}] },
+      { version: 1, strokes: [], rasterReferences: [{}] },
+      { version: 1, strokes: [], importedSvgs: [{}] },
+      { version: 1, strokes: [], shapes: "invalid" },
+    ];
+    for (const project of invalidProjects) {
+      expect(() => deserializeProject(JSON.stringify(project))).toThrow("Invalid project");
+    }
   });
 
   it("round trips first-class shape elements", () => {

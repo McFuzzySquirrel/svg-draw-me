@@ -17,7 +17,7 @@ export function projectToSvg(project: DrawingProject, includeReferences = false)
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${project.width}" height="${project.height}" viewBox="0 0 ${project.width} ${project.height}"><metadata>${escapeText(
     JSON.stringify({ format: "svg-draw-me", version: project.version }),
-  )}</metadata>${content}</svg>`;
+  )}</metadata><defs><clipPath id="project-bounds"><rect width="${project.width}" height="${project.height}"/></clipPath></defs><g clip-path="url(#project-bounds)">${content}</g></svg>`;
 }
 
 export function projectToEditableSvg(project: DrawingProject): string {

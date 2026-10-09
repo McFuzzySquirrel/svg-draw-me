@@ -360,7 +360,7 @@ function validateAnimation(value: unknown): AnimationDefinition {
       typeof value.targetId !== "string" || value.targetId.length === 0 ||
       !isFiniteNumber(value.duration) || value.duration <= 0 ||
       !isFiniteNumber(value.delay) || value.delay < 0 ||
-      !(value.iterations === "infinite" || (Number.isSafeInteger(value.iterations) && value.iterations > 0)) ||
+      !isAnimationIterations(value.iterations) ||
       !isAnimationDirection(value.direction) || !isAnimationEasing(value.easing) ||
       typeof value.enabled !== "boolean") {
     throw new Error("Invalid project animation.");
@@ -382,6 +382,10 @@ function validateAnimation(value: unknown): AnimationDefinition {
 function isAnimationPreset(value: unknown): value is AnimationDefinition["preset"] {
   return value === "fade" || value === "move" || value === "scale" || value === "rotate" ||
     value === "draw" || value === "pulse" || value === "emphasis";
+}
+
+function isAnimationIterations(value: unknown): value is AnimationDefinition["iterations"] {
+  return value === "infinite" || (Number.isSafeInteger(value) && typeof value === "number" && value > 0);
 }
 
 function isAnimationDirection(value: unknown): value is AnimationDefinition["direction"] {

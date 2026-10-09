@@ -19,22 +19,20 @@ export function serializeProject(project: DrawingProject): string {
 
 export function deserializeProject(serialized: string): DrawingProject {
   const parsed: unknown = JSON.parse(serialized);
-  if (!parsed || typeof parsed !== "object") throw new Error("Project data is not an object.");
-  const candidate = parsed as Partial<DrawingProject>;
-  if (candidate.version !== 1 || !Array.isArray(candidate.strokes)) {
+  if (!isRecord(parsed)) throw new Error("Project data is not an object.");
+  if (parsed.version !== 1 || !Array.isArray(parsed.strokes)) {
     throw new Error("Unsupported or invalid project version.");
   }
-  const width = finiteOr(candidate.width, DEFAULT_PROJECT_SIZE.width);
-  const height = finiteOr(candidate.height, DEFAULT_PROJECT_SIZE.height);
-  if (width <= 0 || height <= 0) throw new Error("Project dimensions must be positive.");
+  const width = projectDimension(parsed.width, DEFAULT_PROJECT_SIZE.width);
+  const height = projectDimension(parsed.height, DEFAULT_PROJECT_SIZE.height);
   return {
     version: 1,
     width,
     height,
-    strokes: candidate.strokes.map((stroke) => ({ ...stroke, fill: stroke.fill ?? null })),
-    shapes: Array.isArray(candidate.shapes) ? candidate.shapes : [],
-    rasterReferences: Array.isArray(candidate.rasterReferences) ? candidate.rasterReferences : [],
-    importedSvgs: Array.isArray(candidate.importedSvgs) ? candidate.importedSvgs : [],
+    strokes: parsed.strokes.map(validateStroke),
+    shapes: optionalArray(parsed.shapes, "shapes").map(validateShape),
+    rasterReferences: optionalArray(parsed.rasterReferences, "rasterReferences").map(validateRasterReference),
+    importedSvgs: optionalArray(parsed.importedSvgs, "importedSvgs").map(validateImportedSvg),
   };
 }
 
@@ -88,6 +86,177 @@ export function appendStroke(
   };
 }
 
-function finiteOr(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function projectDimension(value: unknown, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error("Project dimensions must be positive finite numbers.");
+  }
+  return value;
+}
+
+function optionalArray(value: unknown, name: string): unknown[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error(`Invalid project ${name}.`);
+  return value;
+}
+
+function validateStroke(value: unknown): Stroke {
+  if (!isRecord(value) || !Array.isArray(value.points) || value.points.length < 2 || !isRecord(value.style)) {
+    throw new Error("Invalid project stroke.");
+  }
+  const style = validateStrokeStyle(value.style);
+  if (typeof value.id !== "string" || !isPointerKind(value.pointerType) ||
+      !isFiniteNumber(value.startedAt) || !isFiniteNumber(value.endedAt) ||
+      !(value.fill === undefined || value.fill === null || isColor(value.fill))) {
+    throw new Error("Invalid project stroke.");
+  }
+  return {
+    id: value.id,
+    points: value.points.map(validateStrokePoint),
+    style,
+    fill: value.fill ?? null,
+    pointerType: value.pointerType,
+    startedAt: value.startedAt,
+    endedAt: value.endedAt,
+  };
+}
+
+function validateStrokePoint(value: unknown): StrokePoint {
+  if (!isRecord(value) || !isFiniteNumber(value.x) || !isFiniteNumber(value.y) ||
+      !isFiniteNumber(value.pressure) || !isFiniteNumber(value.time)) {
+    throw new Error("Invalid project stroke point.");
+  }
+  return { x: value.x, y: value.y, pressure: value.pressure, time: value.time };
+}
+
+function validateStrokeStyle(value: unknown): StrokeStyle {
+  if (!isRecord(value) || !isColor(value.color) || !isFiniteNumber(value.width) || value.width <= 0 ||
+      !isFiniteNumber(value.opacity) || value.opacity < 0 || value.opacity > 1 ||
+      !isLineCap(value.lineCap) || !isLineJoin(value.lineJoin)) {
+    throw new Error("Invalid project stroke style.");
+  }
+  return {
+    color: value.color,
+    width: value.width,
+    opacity: value.opacity,
+    lineCap: value.lineCap,
+    lineJoin: value.lineJoin,
+  };
+}
+
+function validateShape(value: unknown): Shape {
+  if (!isRecord(value) || !isRecord(value.geometry) || !isRecord(value.style) ||
+      typeof value.id !== "string" || !isPointerKind(value.pointerType) ||
+      !isFiniteNumber(value.startedAt) || !isFiniteNumber(value.endedAt) ||
+      !isRecord(value.style.stroke) ||
+      !(value.style.fill === null || isColor(value.style.fill))) {
+    throw new Error("Invalid project shape.");
+  }
+  const style = { stroke: validateStrokeStyle(value.style.stroke), fill: value.style.fill };
+  const base = {
+    id: value.id,
+    style,
+    pointerType: value.pointerType,
+    startedAt: value.startedAt,
+    endedAt: value.endedAt,
+  };
+  const geometry = value.geometry;
+  if (value.kind === "line" && hasFiniteNumbers(geometry, ["x1", "y1", "x2", "y2"])) {
+    return { ...base, kind: "line", geometry: { x1: geometry.x1, y1: geometry.y1, x2: geometry.x2, y2: geometry.y2 } };
+  }
+  if (value.kind === "rectangle" && hasFiniteNumbers(geometry, ["x", "y", "width", "height"])) {
+    return { ...base, kind: "rectangle", geometry: { x: geometry.x, y: geometry.y, width: geometry.width, height: geometry.height } };
+  }
+  if (value.kind === "ellipse" && hasFiniteNumbers(geometry, ["cx", "cy", "rx", "ry"])) {
+    return { ...base, kind: "ellipse", geometry: { cx: geometry.cx, cy: geometry.cy, rx: geometry.rx, ry: geometry.ry } };
+  }
+  if (value.kind === "curve" && hasFiniteNumbers(geometry, ["x1", "y1", "cx", "cy", "x2", "y2"])) {
+    return { ...base, kind: "curve", geometry: { x1: geometry.x1, y1: geometry.y1, cx: geometry.cx, cy: geometry.cy, x2: geometry.x2, y2: geometry.y2 } };
+  }
+  if (value.kind === "polygon" && Array.isArray(geometry.points) && geometry.points.length >= 2) {
+    return { ...base, kind: "polygon", geometry: { points: geometry.points.map(validateShapePoint) } };
+  }
+  throw new Error("Invalid project shape.");
+}
+
+function validateShapePoint(value: unknown): { x: number; y: number } {
+  if (!isRecord(value) || !isFiniteNumber(value.x) || !isFiniteNumber(value.y)) {
+    throw new Error("Invalid project shape point.");
+  }
+  return { x: value.x, y: value.y };
+}
+
+function validateRasterReference(value: unknown): DrawingProject["rasterReferences"][number] {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
+      typeof value.dataUrl !== "string" || !isFiniteNumber(value.x) || !isFiniteNumber(value.y) ||
+      !isFiniteNumber(value.width) || value.width <= 0 || !isFiniteNumber(value.height) || value.height <= 0 ||
+      !isValidOpacity(value.opacity) || typeof value.visible !== "boolean") {
+    throw new Error("Invalid project raster reference.");
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    dataUrl: value.dataUrl,
+    x: value.x,
+    y: value.y,
+    width: value.width,
+    height: value.height,
+    opacity: value.opacity,
+    visible: value.visible,
+  };
+}
+
+function validateImportedSvg(value: unknown): DrawingProject["importedSvgs"][number] {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
+      typeof value.markup !== "string" || !isFiniteNumber(value.x) || !isFiniteNumber(value.y) ||
+      !isFiniteNumber(value.width) || value.width <= 0 || !isFiniteNumber(value.height) || value.height <= 0 ||
+      !isValidOpacity(value.opacity) || typeof value.visible !== "boolean") {
+    throw new Error("Invalid project SVG reference.");
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    markup: value.markup,
+    x: value.x,
+    y: value.y,
+    width: value.width,
+    height: value.height,
+    opacity: value.opacity,
+    visible: value.visible,
+  };
+}
+
+function hasFiniteNumbers<K extends string>(
+  value: Record<string, unknown>,
+  keys: K[],
+): value is Record<string, unknown> & Record<K, number> {
+  return keys.every((key) => isFiniteNumber(value[key]));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isValidOpacity(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0 && value <= 1;
+}
+
+function isColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+}
+
+function isPointerKind(value: unknown): value is Stroke["pointerType"] {
+  return value === "mouse" || value === "pen" || value === "touch";
+}
+
+function isLineCap(value: unknown): value is StrokeStyle["lineCap"] {
+  return value === "round" || value === "butt" || value === "square";
+}
+
+function isLineJoin(value: unknown): value is StrokeStyle["lineJoin"] {
+  return value === "round" || value === "bevel" || value === "miter";
 }

@@ -85,6 +85,25 @@ describe("stroke-preserving document", () => {
     expect(() => deserializeProject(JSON.stringify({ version: 1, width: 0, height: 800, strokes: [] }))).toThrow(
       "Project dimensions must be positive",
     );
+    for (const width of ["wide", null, Number.NaN]) {
+      expect(() => deserializeProject(JSON.stringify({ version: 1, width, height: 800, strokes: [] }))).toThrow(
+        "Project dimensions must be positive",
+      );
+    }
+    expect(deserializeProject(JSON.stringify({ version: 1, strokes: [] }))).toMatchObject({ width: 1200, height: 800 });
+  });
+
+  it("rejects malformed nested project data before it can be loaded", () => {
+    const invalidProjects = [
+      { version: 1, strokes: [{}] },
+      { version: 1, strokes: [], shapes: [{}] },
+      { version: 1, strokes: [], rasterReferences: [{}] },
+      { version: 1, strokes: [], importedSvgs: [{}] },
+      { version: 1, strokes: [], shapes: "invalid" },
+    ];
+    for (const project of invalidProjects) {
+      expect(() => deserializeProject(JSON.stringify(project))).toThrow("Invalid project");
+    }
   });
 
   it("round trips first-class shape elements", () => {

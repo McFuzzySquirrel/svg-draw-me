@@ -55,7 +55,7 @@ Not applicable to the current static app. There is no identity provider, secret,
 
 ## Storage and Backups
 
-There is no server-side storage. Browser memory is the only working state. Users must download exports to retain work. Maintainers should back up the Git repository and release artifacts through the source-control provider.
+There is no server-side storage or automatic browser persistence. The active project is held in browser memory; users can download a `.svgdraw` project to preserve editable artwork and references, then reopen it later to resume. Standard and editable SVG downloads remain available for export. Maintainers should back up the Git repository and release artifacts through the source-control provider.
 
 ## Health Checks and Monitoring
 
@@ -66,7 +66,7 @@ npm test
 npm run build
 ```
 
-After deployment, verify that the static entry point loads, the browser console has no initialization error, pointer drawing works, imports display, zoom works, and both download actions produce files.
+After deployment, verify that the static entry point loads, the browser console has no initialization error, pointer drawing and imports work, zoom and Pan controls work, pinch zoom also pans, and the grid can be toggled. Save a `.svgdraw` project, open it again, and confirm artwork and references are restored; also verify that standard SVG, editable SVG, and project downloads produce files.
 
 ## Upgrades and Rollback
 
@@ -105,4 +105,4 @@ This is a single-page static app with `index.html` as its entry point. Configure
 
 ## Recovery and Support
 
-Recovery consists of redeploying a known-good static artifact and directing users to download work before leaving the page. There is no server-side recovery for unsaved browser memory. Use the repository issue tracker for support and incident discussion.
+Recovery consists of redeploying a known-good static artifact and directing users to save a `.svgdraw` project before leaving the page. There is no server-side recovery for unsaved browser memory or lost project files. Use the repository issue tracker for support and incident discussion.

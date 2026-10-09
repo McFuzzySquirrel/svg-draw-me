@@ -100,18 +100,18 @@ controls.innerHTML = `
   <button id="menu-toggle" class="menu-toggle" type="button" aria-expanded="true" aria-controls="drawing-controls" aria-label="Hide menu" title="Hide menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   <span id="drawing-controls" class="toolbar-controls">
   <div class="brand"><strong>SVG Draw Me</strong><span>stroke-preserving sketchbook</span></div>
-  <label>Color <input id="color" type="color" value="${currentStyle.color}"></label>
-  <label>Width <input id="width" type="range" min="1" max="60" value="${currentStyle.width}"><output id="width-value">${currentStyle.width}px</output></label>
-  <label>Canvas width <input id="canvas-width" type="number" min="1" step="1" value="${project.width}"></label>
-  <label>Canvas height <input id="canvas-height" type="number" min="1" step="1" value="${project.height}"></label>
-  <label>Grid size <input id="grid-size" type="number" min="1" step="1" value="${gridSize}"></label>
+  <label>Color <input id="color" type="color"></label>
+  <label>Width <input id="width" type="range" min="1" max="60"><output id="width-value"></output></label>
+  <label>Canvas width <input id="canvas-width" type="number" min="1" step="1"></label>
+  <label>Canvas height <input id="canvas-height" type="number" min="1" step="1"></label>
+  <label>Grid size <input id="grid-size" type="number" min="1" step="1"></label>
   <label>Tool <select id="tool"><option value="pen">Pen</option><option value="pan">Pan</option><option value="eraser">Eraser</option><option value="fill">Fill bucket</option><option value="text">Text</option><option value="line">Line</option><option value="rectangle">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="curve">Curved line</option><option value="path">Path</option></select></label>
   <label>Text <input id="text-content" type="text" maxlength="10000" value="Text"></label>
   <label>Text size <input id="text-size" type="number" min="1" step="1" value="32"></label>
   <label>Font <input id="text-font" type="text" value="Inter, sans-serif"></label>
   <span class="control-group" aria-label="Shape fill controls">
     <label for="fill-enabled"><input id="fill-enabled" type="checkbox"> Fill shape</label>
-    <label for="fill-color">Fill color <input id="fill-color" type="color" value="${fillColor}"></label>
+    <label for="fill-color">Fill color <input id="fill-color" type="color"></label>
     <label for="fill-mode">Bucket action
       <select id="fill-mode">
         <option value="color">Apply color</option>
@@ -122,9 +122,9 @@ controls.innerHTML = `
     <label for="gradient-type">Gradient type
       <select id="gradient-type"><option value="linear">Linear</option><option value="radial">Radial</option></select>
     </label>
-    <label for="gradient-end">Gradient end <input id="gradient-end" type="color" value="${gradientEndColor}"></label>
+    <label for="gradient-end">Gradient end <input id="gradient-end" type="color"></label>
     <label for="blur-effect"><input id="blur-effect" type="checkbox"> Blur effect</label>
-    <label for="blur-strength">Blur <input id="blur-strength" type="number" min="0.1" max="50" step="0.1" value="${blurStrength}"></label>
+    <label for="blur-strength">Blur <input id="blur-strength" type="number" min="0.1" max="50" step="0.1"></label>
     <button id="clear-fill" type="button" aria-label="Clear fill" title="Clear fill"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.5 13.5 7l5.5 5.5-10.5 10.5H3zM14 6l2-2 5.5 5.5-2 2"/></svg></button>
   </span>
   <button id="undo" type="button" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
@@ -193,6 +193,15 @@ controls.innerHTML = `
   <p id="status" role="status">Draw with a mouse, finger, or stylus.</p>
   </span>
 `;
+controls.querySelector<HTMLInputElement>("#color")!.value = currentStyle.color;
+controls.querySelector<HTMLInputElement>("#width")!.value = String(currentStyle.width);
+controls.querySelector<HTMLOutputElement>("#width-value")!.value = `${currentStyle.width}px`;
+controls.querySelector<HTMLInputElement>("#canvas-width")!.value = String(project.width);
+controls.querySelector<HTMLInputElement>("#canvas-height")!.value = String(project.height);
+controls.querySelector<HTMLInputElement>("#grid-size")!.value = String(gridSize);
+controls.querySelector<HTMLInputElement>("#fill-color")!.value = fillColor;
+controls.querySelector<HTMLInputElement>("#gradient-end")!.value = gradientEndColor;
+controls.querySelector<HTMLInputElement>("#blur-strength")!.value = String(blurStrength);
 appRoot.append(controls);
 const menuToggle = controls.querySelector<HTMLButtonElement>("#menu-toggle");
 const toolbarControls = controls.querySelector<HTMLSpanElement>("#drawing-controls");
@@ -1367,7 +1376,10 @@ document.querySelector<HTMLInputElement>("#svg")?.addEventListener("change", asy
   if (!file) return;
   let objectUrl: string | undefined;
   try {
-    const markup = await file.text();
+    const markup = (await file.text())
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/\s on[a-z]+\s*=\s*(['"])[\s\S]*?\1/gi, "")
+      .replace(/(?:href|xlink:href)\s*=\s*(['"])javascript:[\s\S]*?\1/gi, "");
     if (!markup.includes("<svg")) return setStatus("That file does not contain SVG markup.");
     objectUrl = URL.createObjectURL(createSvgBlob(markup));
     const context = await Assets.load({
